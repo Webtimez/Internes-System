@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.7.0/dist/tabler-icons.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --pink:#FF5CE0; --pink-dark:#9A0086; --pink-tint:#FFEAFB;
@@ -138,6 +139,22 @@
 </style>
 </head>
 <body>
+<div id="authOverlay" style="position:fixed;inset:0;background:#F4F2F5;display:flex;align-items:center;justify-content:center;z-index:100;padding:20px">
+  <div style="background:#fff;border:1px solid #ECECEE;border-radius:16px;padding:30px;width:360px;max-width:100%">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <div style="width:34px;height:34px;border-radius:9px;background:#FF5CE0;color:#fff;display:flex;align-items:center;justify-content:center;font-size:19px"><i class="ti ti-layout-grid"></i></div>
+      <div style="font-weight:600;font-size:16px">Webtimez · Internes System</div>
+    </div>
+    <p style="font-size:13px;color:#6E6E73;margin:0 0 18px">Bitte anmelden, um auf eure Daten zuzugreifen.</p>
+    <label style="font-size:12px;color:#6E6E73">E-Mail</label>
+    <input id="authEmail" type="email" autocomplete="username" style="width:100%;padding:10px 12px;border:1px solid #ECECEE;border-radius:8px;font-size:14px;margin:5px 0 12px">
+    <label style="font-size:12px;color:#6E6E73">Passwort</label>
+    <input id="authPw" type="password" autocomplete="current-password" style="width:100%;padding:10px 12px;border:1px solid #ECECEE;border-radius:8px;font-size:14px;margin:5px 0 6px">
+    <div id="authErr" style="font-size:12px;color:#A32D2D;min-height:16px;margin-bottom:8px"></div>
+    <button id="authBtn" style="width:100%;background:#FF5CE0;color:#fff;border:none;padding:11px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer">Anmelden</button>
+  </div>
+</div>
+
 <div class="app">
   <aside class="sidebar">
     <div class="logo">
@@ -258,13 +275,14 @@
           <div class="hubcard">
             <div class="hi"><i class="ti ti-database"></i></div>
             <h3>Backend & Login</h3>
-            <p>Aktuell: lokale Speicherung im Browser. Geplant: Supabase-Datenbank + Login pro Person.</p>
-            <span class="pill amber">In Vorbereitung</span>
+            <p>Daten werden in eurer Supabase-Datenbank gespeichert. Zugriff nur nach Anmeldung.</p>
+            <span class="pill green" style="margin-right:8px">Supabase verbunden</span>
+            <button class="btn ghost" style="color:var(--text)" id="logoutBtn"><i class="ti ti-logout"></i> Abmelden</button>
           </div>
         </div>
       </section>
 
-      <div class="demo-note">Webtimez Internes System · Daten werden lokal in diesem Browser gespeichert</div>
+      <div class="demo-note">Webtimez Internes System · Daten in eurer Supabase-Datenbank</div>
     </div>
   </div>
 </div>
@@ -471,8 +489,31 @@ const SET_FIELDS=[
 
 const KEY='webtimez_is_v2';
 let store = {rechnungen:[],kunden:[],lieferanten:[],personal:[],aufgaben:[],termine:[],settings:{}};
-try{ const s=JSON.parse(localStorage.getItem(KEY)); if(s) store={...store,...s}; }catch(e){}
 const persist = () => { try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} };
+
+/* ---------- Supabase-Anbindung ---------- */
+const SB_URL='https://lwqgylsyrarhgaxbrzvm.supabase.co';
+const SB_KEY='sb_publishable_ICakPCjSIwgKk3RBLQiixw_cSJgQnwc';
+const sb = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
+const TABLE={kunden:'kunden',rechnungen:'rechnungen',lieferanten:'anbieter',personal:'personal',aufgaben:'aufgaben',termine:'termine'};
+const NUMF={kunden:['zahlungsziel'],rechnungen:['netto','ust_satz','betrag'],lieferanten:['kosten'],personal:['resturlaub']};
+const DATEF={rechnungen:['datum','faellig'],lieferanten:['naechste'],personal:['eintritt'],aufgaben:['faellig'],termine:['datum']};
+function toDb(key,o){ const d={...o}; delete d.id; delete d.created_at;
+  if(key==='rechnungen'){ d.kunde_id=d.kundeId||null; delete d.kundeId; if('ustSatz' in d){ d.ust_satz=d.ustSatz; delete d.ustSatz; } }
+  (NUMF[key]||[]).forEach(f=>{ if(f in d) d[f]=(d[f]===''||d[f]==null)?null:Number(d[f]); });
+  (DATEF[key]||[]).forEach(f=>{ if(f in d && d[f]==='') d[f]=null; });
+  return d;
+}
+function fromDb(key,r){ const o={...r}; if(key==='rechnungen'){ o.kundeId=r.kunde_id; o.ustSatz=r.ust_satz; } return o; }
+async function dbInsert(key,o){ const {data,error}=await sb.from(TABLE[key]).insert(toDb(key,o)).select().single(); if(error) throw error; return fromDb(key,data); }
+async function dbUpdate(key,id,o){ const {data,error}=await sb.from(TABLE[key]).update(toDb(key,o)).eq('id',id).select().single(); if(error) throw error; return fromDb(key,data); }
+async function dbDelete(key,id){ const {error}=await sb.from(TABLE[key]).delete().eq('id',id); if(error) throw error; }
+async function saveSettings(){ if(sb) await sb.from('settings').upsert({id:1,data:store.settings}); }
+async function loadAll(){
+  for(const key of Object.keys(TABLE)){ const {data,error}=await sb.from(TABLE[key]).select('*').order('created_at',{ascending:true}); if(!error&&data) store[key]=data.map(r=>fromDb(key,r)); }
+  const {data:s}=await sb.from('settings').select('data').eq('id',1).maybeSingle(); store.settings=(s&&s.data)||{};
+  renderAll();
+}
 
 function invPill(r){
   if(r.status==='Bezahlt') return '<span class="pill green">Bezahlt</span>';
@@ -610,13 +651,15 @@ function openForm(schemaKey, id, preset){
 function closeForm(){ document.getElementById('modal').classList.remove('open'); }
 document.getElementById('modalCancel').onclick=closeForm;
 document.getElementById('modal').addEventListener('click',e=>{ if(e.target.id==='modal') closeForm(); });
-document.getElementById('modalSave').onclick=()=>{
+document.getElementById('modalSave').onclick=async ()=>{
   const fd=new FormData(document.getElementById('modalForm')); const obj={}; fd.forEach((v,k)=>obj[k]=typeof v==='string'?v.trim():v);
   const sc=SCHEMAS[formSchema]; if(sc.preset) Object.assign(obj, sc.preset);
   if(formSchema==='verbindlichkeiten') obj.typ='Verbindlichkeit';
-  if(formId){ const i=store[formEntity].findIndex(r=>r.id===formId); store[formEntity][i]={...store[formEntity][i],...obj}; }
-  else { obj.id=uid(); store[formEntity].push(obj); }
-  closeForm(); renderAll();
+  try{
+    if(formId){ const row=await dbUpdate(formEntity,formId,obj); const i=store[formEntity].findIndex(r=>r.id===formId); store[formEntity][i]=row; }
+    else { const row=await dbInsert(formEntity,obj); store[formEntity].push(row); }
+    closeForm(); renderAll();
+  }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
 };
 
 /* ---------- Rechnungs-Generator (Forderung) ---------- */
@@ -678,17 +721,19 @@ document.getElementById('pickCancel').onclick=()=>document.getElementById('pickM
 document.getElementById('pickModal').addEventListener('click',e=>{ if(e.target.id==='pickModal') e.currentTarget.classList.remove('open'); });
 document.getElementById('pickSearch').oninput=e=>renderPickList(e.target.value);
 document.getElementById('pickList').addEventListener('click',e=>{ const p=e.target.closest('[data-pick]'); if(p){ document.getElementById('pickModal').classList.remove('open'); openGenForm(p.dataset.pick,null); } });
-document.getElementById('genSave').onclick=()=>{
+document.getElementById('genSave').onclick=async ()=>{
   const k=store.kunden.find(x=>x.id===genKundeId); if(!k){ alert('Bitte einen Kunden wählen.'); return; }
   const netto=parseFloat(document.getElementById('g-netto').value)||0;
   const ustSatz=parseFloat(document.getElementById('g-ust').value)||0;
   const brutto=Math.round(netto*(1+ustSatz/100)*100)/100;
   const data={ typ:'Forderung', kundeId:k.id, partner:k.name, leistung:document.getElementById('g-leistung').value.trim(),
     netto, ustSatz, betrag:brutto, datum:document.getElementById('g-datum').value, faellig:document.getElementById('g-faellig').value };
-  if(genId){ const i=store.rechnungen.findIndex(x=>x.id===genId); store.rechnungen[i]={...store.rechnungen[i],...data}; }
-  else { data.id=uid(); data.nr=nextInvoiceNr(); data.status='Offen'; store.rechnungen.push(data); }
-  const newId=genId||store.rechnungen[store.rechnungen.length-1].id;
-  closeGen(); renderAll(); openInvoice(newId);
+  try{
+    let row;
+    if(genId){ row=await dbUpdate('rechnungen',genId,data); const i=store.rechnungen.findIndex(x=>x.id===genId); store.rechnungen[i]=row; }
+    else { data.nr=nextInvoiceNr(); data.status='Offen'; row=await dbInsert('rechnungen',data); store.rechnungen.push(row); }
+    closeGen(); renderAll(); openInvoice(row.id);
+  }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
 };
 
 /* ---------- Firmendaten ---------- */
@@ -706,7 +751,7 @@ function openSettings(){
 document.getElementById('templateBtn').onclick=openSettings;
 document.getElementById('setCancel').onclick=()=>document.getElementById('setModal').classList.remove('open');
 document.getElementById('setModal').addEventListener('click',e=>{ if(e.target.id==='setModal') e.currentTarget.classList.remove('open'); });
-document.getElementById('setSave').onclick=()=>{ SET_FIELDS.forEach(f=>{ store.settings[f.k]=document.getElementById('set-'+f.k).value.trim(); }); persist(); document.getElementById('setModal').classList.remove('open'); renderAll(); };
+document.getElementById('setSave').onclick=async ()=>{ SET_FIELDS.forEach(f=>{ store.settings[f.k]=document.getElementById('set-'+f.k).value.trim(); }); try{ await saveSettings(); }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); } document.getElementById('setModal').classList.remove('open'); renderAll(); };
 
 /* ---------- Rechnungs-Beleg ---------- */
 let invId=null;
@@ -756,7 +801,7 @@ function sendInvoice(id){
   const s=store.settings||{};
   const subj=encodeURIComponent('Rechnung '+(r.nr||'')+(s.firmenname?' – '+s.firmenname:''));
   const body=encodeURIComponent(`Sehr geehrte Damen und Herren,\n\nanbei erhalten Sie unsere Rechnung ${r.nr||''} über ${fmt(r.betrag)}.\nWir bitten um Begleichung bis zum ${fmtD(r.faellig)}.\n\nMit freundlichen Grüßen\n${s.firmenname||''}`);
-  if(r.status==='Offen'||r.status==='Entwurf'){ r.status='Versendet'; }
+  if(r.status==='Offen'||r.status==='Entwurf'){ r.status='Versendet'; dbUpdate('rechnungen',r.id,{status:r.status}).catch(()=>{}); }
   renderAll();
   window.location.href=`mailto:${k.email}?subject=${subj}&body=${body}`;
 }
@@ -810,8 +855,8 @@ document.addEventListener('click',e=>{
   const ml=e.target.closest('[data-mail]'); if(ml) openSend(ml.dataset.mail);
   const ge=e.target.closest('[data-genedit]'); if(ge) openGen(ge.dataset.genedit);
   const ed=e.target.closest('[data-edit]'); if(ed) openForm(ed.dataset.edit, ed.dataset.id);
-  const dl=e.target.closest('[data-del]'); if(dl){ const en=dl.dataset.del,id=dl.dataset.id; if(confirm('Eintrag löschen?')){ store[en]=store[en].filter(r=>r.id!==id); renderAll(); } }
-  const td=e.target.closest('[data-todo]'); if(td){ const a=store.aufgaben.find(x=>x.id===td.dataset.todo); if(a){ a.done=!a.done; renderAll(); } }
+  const dl=e.target.closest('[data-del]'); if(dl){ const en=dl.dataset.del,id=dl.dataset.id; if(confirm('Eintrag löschen?')){ dbDelete(en,id).then(()=>{ store[en]=store[en].filter(r=>r.id!==id); renderAll(); }).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); } }
+  const td=e.target.closest('[data-todo]'); if(td){ const a=store.aufgaben.find(x=>x.id===td.dataset.todo); if(a){ a.done=!a.done; renderAll(); dbUpdate('aufgaben',a.id,{done:a.done}).catch(err=>alert('Speichern fehlgeschlagen: '+(err.message||err))); } }
   const tab=e.target.closest('#finTabs button'); if(tab){ document.querySelectorAll('#finTabs button').forEach(b=>b.classList.remove('active')); tab.classList.add('active'); renderFin(tab.dataset.tab); primaryClick.view=currentView; document.getElementById('primaryAction').innerHTML='<i class="ti ti-plus"></i> '+(tab.dataset.tab==='Verbindlichkeit'?'Neue Eingangsrechnung':'Neue Rechnung'); }
 });
 document.getElementById('calPrev').onclick=()=>{ calM--; if(calM<0){calM=11;calY--;} renderCal(); };
@@ -941,7 +986,29 @@ function parseInvoiceText(t){
 document.getElementById('dashForderungen').addEventListener('click',e=>{ const c=e.target.closest('[data-cust]'); if(c) openCustomer(c.dataset.cust); });
 document.getElementById('dashVerbindlichkeiten').addEventListener('click',e=>{ const v=e.target.closest('[data-vb]'); if(v) openForm('verbindlichkeiten', v.dataset.vb); });
 
-go('dashboard'); renderAll();
+/* ---------- Login / Start ---------- */
+async function logout(){ if(sb) await sb.auth.signOut(); location.reload(); }
+document.getElementById('logoutBtn').onclick=logout;
+document.getElementById('authBtn').onclick=async ()=>{
+  const errEl=document.getElementById('authErr'); errEl.textContent='';
+  if(!sb){ errEl.textContent='Supabase nicht geladen (Internetverbindung nötig).'; return; }
+  const email=document.getElementById('authEmail').value.trim();
+  const password=document.getElementById('authPw').value;
+  const btn=document.getElementById('authBtn'); btn.disabled=true; btn.textContent='Anmelden…';
+  const {error}=await sb.auth.signInWithPassword({email,password});
+  btn.disabled=false; btn.textContent='Anmelden';
+  if(error){ errEl.textContent='Login fehlgeschlagen: '+error.message; return; }
+  document.getElementById('authOverlay').style.display='none';
+  await loadAll();
+};
+document.getElementById('authPw').addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('authBtn').click(); });
+
+go('dashboard');
+(async ()=>{
+  if(!sb){ document.getElementById('authErr').textContent='Supabase nicht geladen (Internetverbindung nötig).'; return; }
+  const {data:{session}}=await sb.auth.getSession();
+  if(session){ document.getElementById('authOverlay').style.display='none'; await loadAll(); }
+})();
 </script>
 </body>
 </html>
