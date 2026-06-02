@@ -1,0 +1,4 @@
+# Supabase-Projektkonfiguration
+# project_id wird mit dem Ref des RICHTIGEN Projekts gefüllt,
+# sobald der korrekte Supabase-Account verbunden ist.
+project_id = "HIER_PROJEKT_REF_EINTRAGEN"

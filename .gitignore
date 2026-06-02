@@ -1,0 +1,16 @@
+# Abhängigkeiten
+node_modules/
+
+# Umgebungs-/Geheimnisse – NIEMALS committen
+.env
+.env.*
+*.key
+service_role*.txt
+
+# System
+.DS_Store
+*.log
+
+# Supabase lokale Artefakte
+supabase/.branches/
+supabase/.temp/
