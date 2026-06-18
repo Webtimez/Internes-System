@@ -274,6 +274,10 @@
           <input type="file" id="custDocFile" accept="application/pdf,image/*" multiple style="display:none">
           <input type="file" id="custRechnungFile" accept="application/pdf,image/*" style="display:none">
         </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+          <input id="finSearch" placeholder="Suche: Nummer, Partner, Beleg…" style="flex:1;min-width:180px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+          <select id="finStatus" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px"><option value="">Alle Status</option><option>Offen</option><option>Überfällig</option><option>Teilbezahlt</option><option>Versendet</option><option>Bezahlt</option><option>Storniert</option></select>
+        </div>
         <div class="card"><div id="finTable"></div></div>
       </section>
 
@@ -286,7 +290,13 @@
         </div>
         <div class="card" style="padding:0;overflow:hidden"><div id="crmGrid"></div></div>
       </section>
-      <section class="view" id="view-lieferanten"><div class="card"><div id="liefTable"></div></div></section>
+      <section class="view" id="view-lieferanten">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+          <input id="liefSearch" placeholder="Suche: Anbieter, Verwendung…" style="flex:1;min-width:180px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+          <select id="liefKat" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px"><option value="">Alle Kategorien</option><option>Hosting / Server</option><option>Datenbank / Speicher</option><option>Repository</option><option>Domain</option><option>Zahlungsdienst</option><option>E-Mail / Kommunikation</option><option>Software / Tool</option><option>Marketing</option><option>Buchhaltung / Steuer</option><option>Sonstiges</option></select>
+        </div>
+        <div class="card"><div id="liefTable"></div></div>
+      </section>
       <section class="view" id="view-personal"><div class="card"><div id="persTable"></div></div></section>
 
       <section class="view" id="view-kalender">
@@ -684,19 +694,25 @@ function invPill(r){
 }
 function emptyState(txt, icon){ return `<div class="empty"><i class="ti ${icon||'ti-inbox'}"></i>${txt}</div>`; }
 
+function finQ(){ const e=document.getElementById('finSearch'); return (e&&e.value||'').toLowerCase(); }
 function renderBelege(){
-  const el=document.getElementById('finTable');
+  const el=document.getElementById('finTable'); const q=finQ();
   const head=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div class="hint" style="margin:0">Lade hier alle Rechnungen/Belege hoch. Im Finanzamt-Bereich kannst du sie der jeweiligen Rechnung zuordnen.</div><button class="btn" id="belegUploadBtn"><i class="ti ti-upload"></i> Beleg hochladen</button></div>`;
-  if(!store.belege.length){ el.innerHTML=head+emptyState('Noch keine Belege hochgeladen.','ti-folder'); return; }
+  let list=store.belege; if(q) list=list.filter(b=>(b.name||'').toLowerCase().includes(q));
+  if(!list.length){ el.innerHTML=head+emptyState(q?'Kein Beleg gefunden.':'Noch keine Belege hochgeladen.','ti-folder'); return; }
   let h=head+'<table><thead><tr><th>Dateiname</th><th>Hochgeladen</th><th class="num">Größe</th><th class="act"></th></tr></thead><tbody>';
-  store.belege.forEach(b=>{ h+=`<tr><td>${esc(b.name||'–')}</td><td>${fmtD(b.created_at)}</td><td class="num">${b.groesse?Math.round(b.groesse/1024)+' KB':'–'}</td><td class="act"><i class="ti ti-download iconbtn" data-libdl="${b.id}" title="Herunterladen"></i><i class="ti ti-trash iconbtn" data-libdel="${b.id}" title="Löschen"></i></td></tr>`; });
+  list.forEach(b=>{ h+=`<tr><td>${esc(b.name||'–')}</td><td>${fmtD(b.created_at)}</td><td class="num">${b.groesse?Math.round(b.groesse/1024)+' KB':'–'}</td><td class="act"><i class="ti ti-download iconbtn" data-libdl="${b.id}" title="Herunterladen"></i><i class="ti ti-trash iconbtn" data-libdel="${b.id}" title="Löschen"></i></td></tr>`; });
   el.innerHTML=h+'</tbody></table>';
 }
 function renderFin(typ){
   if(typ==='Belege'){ renderBelege(); return; }
-  const data = store.rechnungen.filter(r=>r.typ===typ);
+  const q=finQ(); const st=(document.getElementById('finStatus')||{}).value||'';
+  let data = store.rechnungen.filter(r=>r.typ===typ);
+  if(q) data=data.filter(r=>((r.nr||'')+' '+(r.partner||'')).toLowerCase().includes(q));
+  if(st==='Überfällig') data=data.filter(r=>{const d=daysTo(r.faellig);return d!==null&&d<0&&!['Bezahlt','Storniert'].includes(r.status);});
+  else if(st) data=data.filter(r=>r.status===st);
   const el=document.getElementById('finTable');
-  if(!data.length){ el.innerHTML=emptyState(typ==='Forderung'?'Noch keine Rechnungen. Oben rechts auf „+ Neue Rechnung".':'Noch keine Eingangsrechnungen. Oben rechts auf „+".','ti-receipt'); return; }
+  if(!data.length){ el.innerHTML=emptyState((q||st)?'Keine Treffer.':(typ==='Forderung'?'Noch keine Rechnungen. Oben rechts auf „+ Neue Rechnung".':'Noch keine Eingangsrechnungen. Oben rechts auf „+".'),'ti-receipt'); return; }
   let h='<table><thead><tr><th>Nummer</th><th>Partner</th><th>Datum</th><th>Fällig</th><th class="num">Betrag</th><th>Status</th><th class="act"></th></tr></thead><tbody>';
   data.forEach(r=>{
     const acts = typ==='Forderung'
@@ -747,6 +763,7 @@ function renderUst(){
     ${vorsteuerBelegList(verb)}
     <p class="hint" style="margin-top:10px">Vorsteuer = USt aus euren Eingangsrechnungen (bekommt ihr verrechnet/zurück). Diese Rechnungen lädst du fürs Finanzamt hoch – PDF hier herunterladen. Orientierungswerte, keine Steuerberatung.</p>`;
 }
+const assignEditing=new Set();
 function vorsteuerBelegList(verb){
   const list=verb.filter(r=>ustOf(r)>0).sort((a,b)=>(parseD(a.datum)||0)-(parseD(b.datum)||0));
   if(!list.length) return '<div class="hint">Noch keine Vorsteuer-Rechnungen erfasst.</div>';
@@ -754,7 +771,14 @@ function vorsteuerBelegList(verb){
   return list.map(r=>{
     const dl = r.beleg_id ? `<span class="link" data-libdl="${r.beleg_id}" style="white-space:nowrap"><i class="ti ti-download"></i> PDF</span>`
             : (r.beleg_name ? `<span class="link" data-inlinedl="${r.id}" style="white-space:nowrap"><i class="ti ti-download"></i> PDF</span>` : '');
-    return `<div class="row" style="flex-wrap:wrap;gap:8px"><span class="grow">${esc(r.nr||'–')} · ${esc(r.partner||'')} · ${fmtD(r.datum)}</span><span style="white-space:nowrap">USt ${fmt(ustOf(r))}</span><select data-assign="${r.id}" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;max-width:180px">${opts(r.beleg_id)}</select>${dl}</div>`;
+    let belegCtrl;
+    if(r.beleg_id && !assignEditing.has(r.id)){
+      const b=store.belege.find(x=>x.id===r.beleg_id);
+      belegCtrl=`<span style="white-space:nowrap;font-size:12px"><i class="ti ti-paperclip" style="vertical-align:-2px"></i> ${esc(b?b.name:'Beleg')} <i class="ti ti-edit iconbtn" data-assignedit="${r.id}" title="Beleg ändern"></i></span>`;
+    } else {
+      belegCtrl=`<select data-assign="${r.id}" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;max-width:180px">${opts(r.beleg_id)}</select>`;
+    }
+    return `<div class="row" style="flex-wrap:wrap;gap:8px"><span class="grow">${esc(r.nr||'–')} · ${esc(r.partner||'')} · ${fmtD(r.datum)}</span><span style="white-space:nowrap">USt ${fmt(ustOf(r))}</span>${belegCtrl}${dl}</div>`;
   }).join('');
 }
 const dashFilter={Forderung:'offen', Verbindlichkeit:'offen'};
@@ -840,14 +864,23 @@ function renderCRM(){
   if(!list.length){ grid.innerHTML=emptyState('Kein Kunde gefunden.','ti-users'); return; }
   grid.innerHTML=list.map(k=>`<div class="lrow" data-cust="${k.id}"><div class="lname">${esc(k.name)||'–'}</div><div style="display:flex;align-items:center;gap:10px"><span class="pill ${statusCls(k.status)}">${esc(k.status||'–')}</span><i class="ti ti-chevron-right" style="color:var(--hint)"></i></div></div>`).join('');
 }
-function renderSimple(entity,el,cols){
-  const data=store[entity], schemaKey=entity==='rechnungen'?'verbindlichkeiten':entity;
-  if(!data.length){ document.getElementById(el).innerHTML=emptyState('Noch keine Einträge.', SCHEMAS[schemaKey].icon); return; }
+function renderSimple(entity,el,cols,dataOverride){
+  const data=dataOverride||store[entity], schemaKey=entity==='rechnungen'?'verbindlichkeiten':entity;
+  if(!data.length){ document.getElementById(el).innerHTML=emptyState('Keine Treffer.', SCHEMAS[schemaKey].icon); return; }
   let h='<table><thead><tr>'+cols.map(c=>`<th class="${c.num?'num':''}">${c.l}</th>`).join('')+'<th class="act"></th></tr></thead><tbody>';
   data.forEach(r=>{ h+=`<tr data-rowedit="${schemaKey}|${r.id}">`+cols.map(c=>`<td class="${c.num?'num':''}">${c.fmt?c.fmt(r[c.k],r):(esc(r[c.k])||'–')}</td>`).join('')+`<td class="act"><i class="ti ti-edit iconbtn" data-edit="${schemaKey}" data-id="${r.id}"></i><i class="ti ti-trash iconbtn" data-del="${entity}" data-id="${r.id}"></i></td></tr>`;});
   document.getElementById(el).innerHTML=h+'</tbody></table>';
 }
-function renderLief(){ renderSimple('lieferanten','liefTable',[{k:'name',l:'Anbieter'},{k:'kategorie',l:'Kategorie'},{k:'zweck',l:'Verwendung'},{k:'kosten',l:'Kosten',num:true,fmt:v=>v?fmt(v):'–'},{k:'intervall',l:'Abrechnung'},{k:'kritikalitaet',l:'Abhängigkeit'}]); }
+function renderLief(){
+  const q=((document.getElementById('liefSearch')||{}).value||'').toLowerCase();
+  const kat=(document.getElementById('liefKat')||{}).value||'';
+  const data=store.lieferanten.filter(a=>{
+    if(kat && a.kategorie!==kat) return false;
+    if(q){ const hay=[a.name,a.zweck,a.kategorie,a.konto,a.email,a.notiz].map(x=>(x||'').toLowerCase()).join(' '); if(!hay.includes(q)) return false; }
+    return true;
+  });
+  renderSimple('lieferanten','liefTable',[{k:'name',l:'Anbieter'},{k:'kategorie',l:'Kategorie'},{k:'zweck',l:'Verwendung'},{k:'kosten',l:'Kosten',num:true,fmt:v=>v?fmt(v):'–'},{k:'intervall',l:'Abrechnung'},{k:'kritikalitaet',l:'Abhängigkeit'}], data);
+}
 function renderPers(){ renderSimple('personal','persTable',[{k:'name',l:'Name'},{k:'rolle',l:'Rolle'},{k:'art',l:'Art'},{k:'eintritt',l:'Eintritt',fmt:v=>fmtD(v)},{k:'resturlaub',l:'Resturlaub',num:true,fmt:v=>v?v+' Tage':'–'}]); }
 
 let calY=today.getFullYear(), calM=today.getMonth();
@@ -1175,6 +1208,11 @@ document.getElementById('calPrev').onclick=()=>{ calM--; if(calM<0){calM=11;calY
 document.getElementById('calNext').onclick=()=>{ calM++; if(calM>11){calM=0;calY++;} renderCal(); };
 document.getElementById('calSearch').oninput=renderCal;
 ['todoSearch','todoPrio','todoAssignee','todoZeit'].forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener(id==='todoSearch'?'input':'change', renderTodoView); });
+const finRefresh=()=>renderFin(document.querySelector('#finTabs button.active').dataset.tab);
+document.getElementById('finSearch').addEventListener('input', finRefresh);
+document.getElementById('finStatus').addEventListener('change', finRefresh);
+document.getElementById('liefSearch').addEventListener('input', renderLief);
+document.getElementById('liefKat').addEventListener('change', renderLief);
 document.getElementById('calHits').addEventListener('click',e=>{ const j=e.target.closest('[data-caljump]'); if(j){ const d=parseD(j.dataset.caljump); if(d){ calY=d.getFullYear(); calM=d.getMonth(); renderCal(); } } });
 
 /* ---------- Export / Import ---------- */
@@ -1197,10 +1235,12 @@ function openCustomer(id){
   const k=store.kunden.find(x=>x.id===id); if(!k) return; currentCust=id;
   document.getElementById('custName').innerHTML=`${esc(k.name||'–')} <span class="pill ${statusCls(k.status)}" style="font-size:12px;vertical-align:2px">${esc(k.status||'')}</span>`;
   const row=(l,v)=>v?`<div style="display:flex;padding:7px 0;border-top:1px solid var(--border);font-size:13px"><div style="width:160px;color:var(--muted)">${l}</div><div style="flex:1">${v}</div></div>`:'';
-  const inv=store.rechnungen.filter(r=>r.typ==='Forderung'&&(r.kundeId===k.id||r.partner===k.name));
-  const invHtml = inv.length
-    ? '<table style="margin-top:6px"><thead><tr><th>Nummer</th><th>Datum</th><th class="num">Betrag</th><th>Status</th></tr></thead><tbody>'+inv.map(r=>`<tr data-inv="${r.id}" style="cursor:pointer"><td>${esc(r.nr||'')}</td><td>${fmtD(r.datum)}</td><td class="num">${fmt(r.betrag)}</td><td>${invPill(r)}</td></tr>`).join('')+'</tbody></table>'
-    : '<div class="hint" style="margin-top:6px">Noch keine Rechnungen für diesen Kunden.</div>';
+  const ford=store.rechnungen.filter(r=>r.typ==='Forderung'&&(r.kundeId===k.id||r.partner===k.name));
+  const verb=store.rechnungen.filter(r=>r.typ==='Verbindlichkeit'&&r.partner===k.name);
+  const invTable=(arr,kind)=> arr.length
+    ? '<table style="margin-top:4px"><thead><tr><th>Nummer</th><th>Datum</th><th class="num">Betrag</th><th>Status</th></tr></thead><tbody>'+arr.map(r=>`<tr ${kind==='f'?`data-inv="${r.id}"`:`data-vbedit="${r.id}"`} style="cursor:pointer"><td>${esc(r.nr||'')}</td><td>${fmtD(r.datum)}</td><td class="num">${fmt(r.betrag)}</td><td>${invPill(r)}</td></tr>`).join('')+'</tbody></table>'
+    : '<div class="hint" style="margin:4px 0">Keine.</div>';
+  const invHtml = `<div style="font-size:12px;color:var(--muted);margin:6px 0 0">Forderungen an den Kunden</div>${invTable(ford,'f')}<div style="font-size:12px;color:var(--muted);margin:14px 0 0">Verbindlichkeiten von dem Kunden</div>${invTable(verb,'v')}`;
   const docs=store.belege.filter(b=>b.kunde_id===k.id);
   const docList=docs.length
     ? '<div class="doclist">'+docs.map(b=>`<div class="row"><span class="grow">${esc(b.name||'Datei')}</span><span style="color:var(--muted);font-size:12px;margin:0 10px">${fmtD(b.created_at)}</span><i class="ti ti-download iconbtn" data-libdl="${b.id}"></i><i class="ti ti-trash iconbtn" data-libdel="${b.id}"></i></div>`).join('')+'</div>'
@@ -1239,6 +1279,7 @@ document.getElementById('custInvoice').onclick=()=>{ document.getElementById('cu
 document.getElementById('custDelete').onclick=()=>{ if(confirm('Kunden löschen?')) dbDelete('kunden',currentCust).then(()=>{ store.kunden=store.kunden.filter(x=>x.id!==currentCust); document.getElementById('custModal').classList.remove('open'); renderAll(); }).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); };
 document.getElementById('custBody').addEventListener('click',e=>{
   const v=e.target.closest('[data-inv]'); if(v){ document.getElementById('custModal').classList.remove('open'); openInvoice(v.dataset.inv); return; }
+  const vb=e.target.closest('[data-vbedit]'); if(vb){ document.getElementById('custModal').classList.remove('open'); openForm('verbindlichkeiten', vb.dataset.vbedit); return; }
   const dl=e.target.closest('[data-libdl]'); if(dl){ downloadLibBeleg(dl.dataset.libdl); return; }
   const del=e.target.closest('[data-libdel]'); if(del){ if(confirm('Dokument löschen?')) deleteBelegLib(del.dataset.libdel).then(()=>openCustomer(currentCust)).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); return; }
   if(e.target.closest('#custDocUpload')){ document.getElementById('custDocFile').click(); return; }
@@ -1465,10 +1506,11 @@ function parseInvoiceText(t){
 document.getElementById('dashForderungen').addEventListener('click',e=>{ const c=e.target.closest('[data-cust]'); if(c) openCustomer(c.dataset.cust); });
 document.getElementById('dashVerbindlichkeiten').addEventListener('click',e=>{ const v=e.target.closest('[data-vb]'); if(v) openForm('verbindlichkeiten', v.dataset.vb); });
 document.getElementById('ustOverview').addEventListener('click',e=>{
+  const ae=e.target.closest('[data-assignedit]'); if(ae){ assignEditing.add(ae.dataset.assignedit); renderUst(); return; }
   const l=e.target.closest('[data-libdl]'); if(l){ downloadLibBeleg(l.dataset.libdl); return; }
   const i=e.target.closest('[data-inlinedl]'); if(i){ downloadInlineBeleg(i.dataset.inlinedl); }
 });
-document.getElementById('ustOverview').addEventListener('change',e=>{ const s=e.target.closest('[data-assign]'); if(s) assignBeleg(s.dataset.assign, s.value); });
+document.getElementById('ustOverview').addEventListener('change',e=>{ const s=e.target.closest('[data-assign]'); if(s){ assignEditing.delete(s.dataset.assign); assignBeleg(s.dataset.assign, s.value); } });
 // Beleg-Ablage (Finanzen → Belege)
 document.getElementById('finTable').addEventListener('click',e=>{
   if(e.target.closest('#belegUploadBtn')) document.getElementById('belegFile').click();
