@@ -254,6 +254,7 @@
           <input type="file" id="pdfFile" accept="application/pdf,image/*" style="display:none">
           <input type="file" id="belegFile" accept="application/pdf,image/*" multiple style="display:none">
           <input type="file" id="custDocFile" accept="application/pdf,image/*" multiple style="display:none">
+          <input type="file" id="custRechnungFile" accept="application/pdf,image/*" style="display:none">
         </div>
         <div class="card"><div id="finTable"></div></div>
       </section>
@@ -1072,8 +1073,8 @@ function openCustomer(id){
     ${row('Zahlungsziel',k.zahlungsziel?esc(k.zahlungsziel)+' Tage':'')}
     ${row('Offener Betrag',`<b>${fmt(kundeOffen(k))}</b>`)}
     ${row('Notiz',esc(k.notiz||'').replace(/\n/g,'<br>'))}
-    <h3 style="font-size:14px;margin:20px 0 0">Rechnungen</h3>${invHtml}
-    <div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 6px"><h3 style="font-size:14px;margin:0">Dokumente / Belege</h3><button class="btn ghost" style="color:var(--text)" id="custDocUpload"><i class="ti ti-upload"></i> Hochladen</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 6px"><h3 style="font-size:14px;margin:0">Rechnungen</h3><button class="btn ghost" style="color:var(--text)" id="custRechnungUpload"><i class="ti ti-file-upload"></i> Rechnung hochladen</button></div>${invHtml}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 6px"><h3 style="font-size:14px;margin:0">Dokumente / Belege</h3><button class="btn ghost" style="color:var(--text)" id="custDocUpload"><i class="ti ti-upload"></i> Beleg hochladen</button></div>
     ${docList}
     <div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 6px"><h3 style="font-size:14px;margin:0">Zugänge / Logins</h3><button class="btn ghost" style="color:var(--text)" id="custZugAdd"><i class="ti ti-plus"></i> Zugang</button></div>
     ${zugList}
@@ -1090,6 +1091,7 @@ document.getElementById('custBody').addEventListener('click',e=>{
   const dl=e.target.closest('[data-libdl]'); if(dl){ downloadLibBeleg(dl.dataset.libdl); return; }
   const del=e.target.closest('[data-libdel]'); if(del){ if(confirm('Dokument löschen?')) deleteBelegLib(del.dataset.libdel).then(()=>openCustomer(currentCust)).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); return; }
   if(e.target.closest('#custDocUpload')){ document.getElementById('custDocFile').click(); return; }
+  if(e.target.closest('#custRechnungUpload')){ document.getElementById('custRechnungFile').click(); return; }
   if(e.target.closest('#custZugAdd')){ openZugang(currentCust,null); return; }
   const ze=e.target.closest('[data-zugedit]'); if(ze){ openZugang(currentCust, ze.dataset.zugedit); return; }
   const zd=e.target.closest('[data-zugdel]'); if(zd){ if(confirm('Zugang löschen?')) deleteZugang(zd.dataset.zugdel).then(()=>openCustomer(currentCust)).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); return; }
@@ -1129,6 +1131,21 @@ document.getElementById('custDocFile').onchange=async e=>{
   try{ for(const f of files) await uploadBelegFile(f, currentCust); openCustomer(currentCust); renderDash(); }
   catch(err){ alert('Upload fehlgeschlagen: '+(err.message||err)); }
   finally{ e.target.value=''; }
+};
+document.getElementById('custRechnungFile').onchange=async e=>{
+  const file=e.target.files[0]; if(!file||!currentCust) return;
+  const cust=currentCust;
+  const btn=document.getElementById('custRechnungUpload'); const setMsg=m=>{ if(btn) btn.innerHTML='<i class="ti ti-loader-2"></i> '+m; };
+  if(btn) btn.disabled=true; setMsg('Analysiere…');
+  try{
+    const k=store.kunden.find(x=>x.id===cust)||{};
+    const p=await analyzeInvoiceFile(file, setMsg);
+    const beleg=await fileToDataUrl(file);
+    const obj={ typ:'Forderung', kundeId:cust, partner:k.name||p.partner||'', nr:p.nr||null, datum:p.datum||null, faellig:p.faellig||null, leistung:p.leistung||null, netto:p.netto??null, ustSatz:p.ustSatz||null, betrag:p.betrag??null, status:'Offen', beleg, beleg_name:file.name };
+    const row=await dbInsert('rechnungen', obj); store.rechnungen.push(row);
+    openCustomer(cust); renderDash();
+  }catch(err){ alert('Analyse fehlgeschlagen: '+(err.message||err)+' – du kannst die Rechnung auch manuell über „Neue Rechnung" anlegen.'); openCustomer(cust); }
+  finally{ if(btn) btn.disabled=false; e.target.value=''; }
 };
 
 /* ---------- CRM-Toolbar & Chat ---------- */
@@ -1179,6 +1196,18 @@ async function ocr(url, setMsg){
   if(!window.Tesseract) throw new Error('ocr');
   const {data}=await Tesseract.recognize(url,'deu',{logger:m=>{ if(m.status==='recognizing text'&&setMsg) setMsg('Texterkennung '+Math.round(m.progress*100)+'%'); }});
   return data.text||'';
+}
+async function analyzeInvoiceFile(file, setMsg){
+  const isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
+  let text='';
+  if(isPdf){
+    if(!window.pdfjsLib) throw new Error('pdfjs');
+    const buf=await file.arrayBuffer();
+    const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+    text=await extractPdfText(pdf);
+    if(text.replace(/\s/g,'').length<25){ if(setMsg) setMsg('Texterkennung…'); text=''; for(let i=1;i<=Math.min(pdf.numPages,3);i++){ const url=await pdfPageToDataUrl(await pdf.getPage(i)); text+=await ocr(url,setMsg)+'\n'; } }
+  } else { if(setMsg) setMsg('Texterkennung…'); text=await ocr(await fileToDataUrl(file), setMsg); }
+  return parseInvoiceText(text);
 }
 async function extractPdfText(pdf){
   let text='';
