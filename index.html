@@ -224,7 +224,7 @@
         <button class="btn ghost" id="templateBtn" style="color:var(--text)"><i class="ti ti-file-invoice"></i> Rechnungsvorlage</button>
         <input type="file" id="importFile" accept="application/json" style="display:none">
         <button class="btn" id="primaryAction"><i class="ti ti-plus"></i> Neue Rechnung</button>
-        <div class="avatar">WT</div>
+        <div class="avatar" id="meAvatar" title="Angemeldet">WT</div>
       </div>
     </header>
     <div class="content">
@@ -656,7 +656,8 @@ async function loadAll(){
   renderAll();
 }
 let MY_ID=null, MSG_PEER=null;
-function myName(){ const p=store.profiles.find(x=>x.id===MY_ID); return (p&&p.name)||'ich'; }
+function myName(){ const p=store.profiles.find(x=>x.id===MY_ID); return (p&&(p.name||p.email))||'ich'; }
+function updateIdentity(){ const n=myName(); const ini=(n.split(/\s+/).map(w=>w[0]).join('').slice(0,2)||'?').toUpperCase(); const el=document.getElementById('meAvatar'); if(el){ el.textContent=ini; el.title='Angemeldet als '+n; } }
 function triggerDownload(dataUrl,name){ const a=document.createElement('a'); a.href=dataUrl; a.download=name||'beleg.pdf'; a.click(); }
 async function downloadInlineBeleg(id){
   const {data,error}=await sb.from('rechnungen').select('beleg,beleg_name').eq('id',id).single();
@@ -952,7 +953,7 @@ function renderAll(){
   persist(); renderDash();
   renderFin(document.querySelector('#finTabs button.active').dataset.tab);
   renderCRM(); renderLief(); renderPers(); renderCal();
-  fillTodoAssignee(); renderTodoView(); renderKundenList(); renderFirmenZugaenge();
+  fillTodoAssignee(); renderTodoView(); renderKundenList(); renderFirmenZugaenge(); updateIdentity();
 }
 
 /* ---------- Standard-Formular ---------- */
@@ -1564,14 +1565,16 @@ async function renderNachrichten(){
   const unread={};
   try{ const {data}=await sb.from('nachrichten').select('von').eq('an',MY_ID).eq('gelesen',false); (data||[]).forEach(m=>{ unread[m.von]=(unread[m.von]||0)+1; }); }catch(e){}
   const el=document.getElementById('msgPeople');
-  el.innerHTML = others.length ? others.map(p=>`<div class="msgp ${MSG_PEER===p.id?'active':''}" data-peer="${p.id}"><span>${esc(p.name||p.email||'?')}</span>${unread[p.id]?`<span class="unread">${unread[p.id]}</span>`:''}</div>`).join('') : '<div class="hint" style="padding:14px">Noch keine weiteren Nutzer. Sobald Kollegen ein eigenes Konto haben, erscheinen sie hier.</div>';
+  const selfEntry=`<div class="msgp ${MSG_PEER===MY_ID?'active':''}" data-peer="${MY_ID}"><span><i class="ti ti-notes" style="vertical-align:-2px"></i> Ich (Notizen)</span></div>`;
+  const peopleHtml = others.length ? others.map(p=>`<div class="msgp ${MSG_PEER===p.id?'active':''}" data-peer="${p.id}"><span>${esc(p.name||p.email||'?')}</span>${unread[p.id]?`<span class="unread">${unread[p.id]}</span>`:''}</div>`).join('') : '<div class="hint" style="padding:14px">Noch keine weiteren Nutzer. Sobald Kollegen ein eigenes Konto haben, erscheinen sie hier.</div>';
+  el.innerHTML = selfEntry + peopleHtml;
   if(MSG_PEER) openConversation(MSG_PEER);
 }
 async function openConversation(peerId){
   MSG_PEER=peerId;
   document.querySelectorAll('#msgPeople .msgp').forEach(x=>x.classList.toggle('active', x.dataset.peer===peerId));
   const peer=store.profiles.find(p=>p.id===peerId)||{};
-  document.getElementById('msgHeader').textContent=peer.name||peer.email||'Chat';
+  document.getElementById('msgHeader').textContent = peerId===MY_ID ? 'Meine Notizen' : (peer.name||peer.email||'Chat');
   document.getElementById('msgInputRow').style.display='flex';
   const {data,error}=await sb.from('nachrichten').select('*').or(`and(von.eq.${MY_ID},an.eq.${peerId}),and(von.eq.${peerId},an.eq.${MY_ID})`).order('created_at');
   const th=document.getElementById('msgThread');
