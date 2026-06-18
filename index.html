@@ -312,6 +312,11 @@
             <button class="btn ghost" style="color:var(--text)" id="logoutBtn"><i class="ti ti-logout"></i> Abmelden</button>
           </div>
         </div>
+        <div class="card" style="margin-top:18px">
+          <div class="head"><h3><i class="ti ti-key" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>Firmen-Zugänge & Passwörter</h3><button class="btn" id="firmaZugAdd"><i class="ti ti-plus"></i> Zugang</button></div>
+          <p class="hint" style="margin-top:0">Eure eigenen Logins (Anbieter, Tools, Konten) – getrennt von den Kunden. Passwörter sind verdeckt, Auge zum Einblenden.</p>
+          <div id="firmaZugList"></div>
+        </div>
       </section>
 
       <div class="demo-note">Webtimez Internes System · Daten in eurer Supabase-Datenbank</div>
@@ -774,11 +779,26 @@ function renderCal(){
 }
 function renderKundenList(){ document.getElementById('kundenList').innerHTML=store.kunden.map(k=>`<option value="${esc(k.name)}">`).join(''); }
 
+function zugRowHtml(z){
+  const an=store.lieferanten.find(a=>a.id===z.anbieter_id); const href=z.url?(/^https?:/i.test(z.url)?z.url:'https://'+z.url):'';
+  return `<div class="row" style="flex-wrap:wrap;gap:6px">
+    <span class="grow"><b>${esc(an?an.name:(z.bezeichnung||'Zugang'))}</b>${an&&z.bezeichnung?' · '+esc(z.bezeichnung):''}${z.benutzer?`<br><span style="color:var(--muted);font-size:12px">${esc(z.benutzer)}</span>`:''}</span>
+    ${href?`<a href="${esc(href)}" target="_blank" class="link" title="Öffnen"><i class="ti ti-external-link"></i></a>`:''}
+    <span class="zpw" data-shown="0" style="font-family:monospace;font-size:12px;min-width:60px;text-align:right">••••••</span>
+    <i class="ti ti-eye iconbtn" data-reveal="${z.id}" title="Passwort anzeigen"></i>
+    <i class="ti ti-edit iconbtn" data-zugedit="${z.id}"></i>
+    <i class="ti ti-trash iconbtn" data-zugdel="${z.id}"></i></div>`;
+}
+function renderFirmenZugaenge(){
+  const el=document.getElementById('firmaZugList'); if(!el) return;
+  const zug=store.zugaenge.filter(z=>!z.kunde_id);
+  el.innerHTML = zug.length ? zug.map(zugRowHtml).join('') : '<div class="hint">Noch keine Firmen-Zugänge.</div>';
+}
 function renderAll(){
   persist(); renderDash();
   renderFin(document.querySelector('#finTabs button.active').dataset.tab);
   renderCRM(); renderLief(); renderPers(); renderCal();
-  renderTodoList('todoFull', store.aufgaben); renderKundenList();
+  renderTodoList('todoFull', store.aufgaben); renderKundenList(); renderFirmenZugaenge();
 }
 
 /* ---------- Standard-Formular ---------- */
@@ -1121,9 +1141,15 @@ document.getElementById('zugSave').onclick=async ()=>{
   try{
     if(zugEditId){ const {data,error}=await sb.from('zugaenge').update(obj).eq('id',zugEditId).select().single(); if(error) throw error; const i=store.zugaenge.findIndex(x=>x.id===zugEditId); store.zugaenge[i]=data; }
     else { const {data,error}=await sb.from('zugaenge').insert(obj).select().single(); if(error) throw error; store.zugaenge.push(data); }
-    document.getElementById('zugModal').classList.remove('open'); openCustomer(zugKunde);
+    document.getElementById('zugModal').classList.remove('open'); if(zugKunde) openCustomer(zugKunde); else renderFirmenZugaenge();
   }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
 };
+document.getElementById('firmaZugAdd').onclick=()=>openZugang(null,null);
+document.getElementById('firmaZugList').addEventListener('click',e=>{
+  const rv=e.target.closest('[data-reveal]'); if(rv){ const z=store.zugaenge.find(x=>x.id===rv.dataset.reveal); const span=rv.parentElement.querySelector('.zpw'); if(span){ if(span.dataset.shown==='1'){ span.textContent='••••••'; span.dataset.shown='0'; } else { span.textContent=(z&&z.passwort)?z.passwort:'(leer)'; span.dataset.shown='1'; } } return; }
+  const ze=e.target.closest('[data-zugedit]'); if(ze){ openZugang(null, ze.dataset.zugedit); return; }
+  const zd=e.target.closest('[data-zugdel]'); if(zd){ if(confirm('Zugang löschen?')) deleteZugang(zd.dataset.zugdel).then(()=>renderFirmenZugaenge()).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); return; }
+});
 async function deleteZugang(id){ const {error}=await sb.from('zugaenge').delete().eq('id',id); if(error) throw error; store.zugaenge=store.zugaenge.filter(z=>z.id!==id); }
 document.getElementById('custDocFile').onchange=async e=>{
   const files=[...e.target.files]; if(!files.length||!currentCust) return;
@@ -1197,17 +1223,34 @@ async function ocr(url, setMsg){
   const {data}=await Tesseract.recognize(url,'deu',{logger:m=>{ if(m.status==='recognizing text'&&setMsg) setMsg('Texterkennung '+Math.round(m.progress*100)+'%'); }});
   return data.text||'';
 }
+function mapAi(d){
+  const num=v=>(v==null||v==='')?undefined:Number(v);
+  return { status:'Offen', nr:d.nr||undefined, datum:d.datum||undefined, faellig:d.faellig||undefined,
+    netto:num(d.netto), betrag:num(d.brutto), ustSatz:(d.ust_satz!=null&&d.ust_satz!=='')?String(d.ust_satz):undefined,
+    aussteller:d.aussteller||undefined, empfaenger:d.empfaenger||undefined,
+    partner:d.empfaenger||d.aussteller||undefined, leistung:d.leistung||undefined };
+}
 async function analyzeInvoiceFile(file, setMsg){
   const isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
-  let text='';
+  let text='', imageBase64=null, mimeType=file.type||'application/octet-stream';
   if(isPdf){
     if(!window.pdfjsLib) throw new Error('pdfjs');
     const buf=await file.arrayBuffer();
     const pdf=await pdfjsLib.getDocument({data:buf}).promise;
     text=await extractPdfText(pdf);
-    if(text.replace(/\s/g,'').length<25){ if(setMsg) setMsg('Texterkennung…'); text=''; for(let i=1;i<=Math.min(pdf.numPages,3);i++){ const url=await pdfPageToDataUrl(await pdf.getPage(i)); text+=await ocr(url,setMsg)+'\n'; } }
-  } else { if(setMsg) setMsg('Texterkennung…'); text=await ocr(await fileToDataUrl(file), setMsg); }
-  return parseInvoiceText(text);
+    if(text.replace(/\s/g,'').length<25){ const url=await pdfPageToDataUrl(await pdf.getPage(1)); imageBase64=url.split(',')[1]; mimeType='image/png'; }
+  } else { const url=await fileToDataUrl(file); imageBase64=url.split(',')[1]; mimeType=file.type||'image/png'; }
+  // 1) KI-Auslesung (Gemini via Supabase Edge Function)
+  if(sb){
+    try{
+      if(setMsg) setMsg('KI liest Rechnung…');
+      const {data,error}=await sb.functions.invoke('extract-invoice',{ body:{ text: imageBase64?undefined:text, imageBase64, mimeType } });
+      if(!error && data && !data.error && (data.nr||data.brutto!=null||data.netto!=null||data.aussteller)) return mapAi(data);
+    }catch(e){}
+  }
+  // 2) Fallback: lokale Regeln
+  if(!text && imageBase64){ if(setMsg) setMsg('Texterkennung…'); try{ text=await ocr('data:'+mimeType+';base64,'+imageBase64, setMsg); }catch(e){} }
+  return parseInvoiceText(text||'');
 }
 async function extractPdfText(pdf){
   let text='';
@@ -1229,27 +1272,14 @@ document.getElementById('pdfFile').onchange=async e=>{
   setMsg('Analysiere…');
   try{
     pendingBeleg={data:await fileToDataUrl(file), name:file.name};
-    const isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
-    let text='';
-    if(isPdf){
-      if(!window.pdfjsLib) throw new Error('pdfjs');
-      const buf=await file.arrayBuffer();
-      const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-      text=await extractPdfText(pdf);
-      if(text.replace(/\s/g,'').length<25){ // kein/zu wenig Text → gescannt → OCR
-        setMsg('Texterkennung…'); text='';
-        for(let i=1;i<=Math.min(pdf.numPages,3);i++){ const url=await pdfPageToDataUrl(await pdf.getPage(i)); text+=await ocr(url,setMsg)+'\n'; }
-      }
-    } else { // Bilddatei (Foto/Scan)
-      setMsg('Texterkennung…');
-      text=await ocr(await fileToDataUrl(file), setMsg);
-    }
-    const preset=parseInvoiceText(text); preset.typ=typ; preset.beschreibung='Importiert aus '+file.name;
+    const preset=await analyzeInvoiceFile(file, setMsg);
+    preset.typ=typ; preset.beschreibung='Importiert aus '+file.name;
+    if(preset.aussteller||preset.empfaenger) preset.partner = (typ==='Verbindlichkeit') ? (preset.aussteller||preset.partner) : (preset.empfaenger||preset.partner);
     if(!preset.netto && !preset.betrag && !preset.nr){ alert('Es konnten nur wenige Daten erkannt werden – bitte im Formular ergänzen/korrigieren.'); }
     openForm('rechnungimport', null, preset);
   }catch(err){
     const m=err&&err.message;
-    alert('Datei konnte nicht analysiert werden'+(m==='pdfjs'?' (PDF-Modul nicht geladen – Internet nötig).':m==='ocr'?' (Texterkennung nicht geladen – Internet nötig).':'.')+' Du kannst die Daten im Formular manuell eintragen.');
+    alert('Datei konnte nicht analysiert werden'+(m==='pdfjs'?' (PDF-Modul nicht geladen – Internet nötig).':'.')+' Du kannst die Daten im Formular manuell eintragen.');
     openForm('rechnungimport', null, {typ});
   }
   finally{ btn.innerHTML=orig; btn.disabled=false; e.target.value=''; }
