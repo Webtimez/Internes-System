@@ -8,6 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
   :root{
     --pink:#FF5CE0; --pink-dark:#9A0086; --pink-tint:#FFEAFB;
@@ -225,8 +226,8 @@
             <button class="active" data-tab="Forderung">Forderungen (Ausgang)</button>
             <button data-tab="Verbindlichkeit">Verbindlichkeiten (Eingang)</button>
           </div>
-          <button class="btn ghost" id="pdfBtn" style="color:var(--text)"><i class="ti ti-file-upload"></i> PDF-Rechnung hochladen</button>
-          <input type="file" id="pdfFile" accept="application/pdf" style="display:none">
+          <button class="btn ghost" id="pdfBtn" style="color:var(--text)"><i class="ti ti-file-upload"></i> Rechnung hochladen (PDF/Bild)</button>
+          <input type="file" id="pdfFile" accept="application/pdf,image/*" style="display:none">
         </div>
         <div class="card"><div id="finTable"></div></div>
       </section>
@@ -463,6 +464,18 @@ const SCHEMAS = {
     {k:'datum', l:'Datum', t:'date', half:true},
     {k:'typ', l:'Typ', t:'select', o:['Termin','Frist','Erinnerung'], half:true},
   ]},
+  rechnungimport:{ singular:'Rechnung (Import)', icon:'ti-receipt', entity:'rechnungen', fields:[
+    {k:'typ', l:'Art', t:'select', o:['Verbindlichkeit','Forderung']},
+    {k:'nr', l:'Rechnungsnummer', t:'text', ph:'z. B. RE-2026-001'},
+    {k:'partner', l:'Partner (Kunde / Anbieter)', t:'text', ph:'Name'},
+    {k:'datum', l:'Rechnungsdatum', t:'date', half:true},
+    {k:'faellig', l:'Fälligkeitsdatum', t:'date', half:true},
+    {k:'netto', l:'Netto (€)', t:'number', ph:'0.00', half:true},
+    {k:'ustSatz', l:'USt-Satz (%)', t:'select', o:['19','7','0'], half:true},
+    {k:'betrag', l:'Brutto (€)', t:'number', ph:'leer = wird berechnet', half:true},
+    {k:'status', l:'Status', t:'select', o:['Offen','Teilbezahlt','Bezahlt','Versendet'], half:true},
+    {k:'beschreibung', l:'Notiz', t:'textarea', ph:'optional'},
+  ]},
   verbindlichkeiten:{ singular:'Verbindlichkeit', icon:'ti-receipt', entity:'rechnungen', fields:[
     {k:'nr', l:'Rechnungsnummer', t:'text', ph:'Nr. des Lieferanten'},
     {k:'partner', l:'Anbieter / Lieferant', t:'text', ph:'Name'},
@@ -681,12 +694,12 @@ function openForm(schemaKey, id, preset){
 }
 function closeForm(){ document.getElementById('modal').classList.remove('open'); }
 document.getElementById('modalCancel').onclick=closeForm;
-document.getElementById('modal').addEventListener('click',e=>{ if(e.target.id==='modal') closeForm(); });
+/* Hintergrund-Klick schließt das Eingabeformular NICHT mehr – kein Datenverlust. Schließen nur über Abbrechen. */
 document.getElementById('modalSave').onclick=async ()=>{
   const fd=new FormData(document.getElementById('modalForm')); const obj={}; fd.forEach((v,k)=>obj[k]=typeof v==='string'?v.trim():v);
   const sc=SCHEMAS[formSchema]; if(sc.preset) Object.assign(obj, sc.preset);
-  if(formSchema==='verbindlichkeiten'){
-    obj.typ='Verbindlichkeit';
+  if(formEntity==='rechnungen'){
+    if(formSchema==='verbindlichkeiten') obj.typ='Verbindlichkeit';
     const r=parseFloat(obj.ustSatz)||0;
     let netto=(obj.netto===''||obj.netto==null)?null:parseFloat(obj.netto);
     let brutto=(obj.betrag===''||obj.betrag==null)?null:parseFloat(obj.betrag);
@@ -755,7 +768,7 @@ function openGenForm(kundeId,id){
 }
 function closeGen(){ document.getElementById('genModal').classList.remove('open'); }
 document.getElementById('genCancel').onclick=closeGen;
-document.getElementById('genModal').addEventListener('click',e=>{ if(e.target.id==='genModal') closeGen(); });
+/* Hintergrund-Klick schließt den Rechnungs-Generator NICHT – kein Datenverlust. Schließen nur über Abbrechen. */
 document.getElementById('pickCancel').onclick=()=>document.getElementById('pickModal').classList.remove('open');
 document.getElementById('pickModal').addEventListener('click',e=>{ if(e.target.id==='pickModal') e.currentTarget.classList.remove('open'); });
 document.getElementById('pickSearch').oninput=e=>renderPickList(e.target.value);
@@ -789,7 +802,7 @@ function openSettings(){
 }
 document.getElementById('templateBtn').onclick=openSettings;
 document.getElementById('setCancel').onclick=()=>document.getElementById('setModal').classList.remove('open');
-document.getElementById('setModal').addEventListener('click',e=>{ if(e.target.id==='setModal') e.currentTarget.classList.remove('open'); });
+/* Hintergrund-Klick schließt die Einstellungen NICHT – kein Datenverlust. Schließen nur über Abbrechen. */
 document.getElementById('setSave').onclick=async ()=>{ SET_FIELDS.forEach(f=>{ store.settings[f.k]=document.getElementById('set-'+f.k).value.trim(); }); try{ await saveSettings(); }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); } document.getElementById('setModal').classList.remove('open'); renderAll(); };
 
 /* ---------- Rechnungs-Beleg ---------- */
@@ -953,7 +966,7 @@ document.getElementById('crmGrid').addEventListener('click',e=>{
 });
 document.getElementById('crmChat').onclick=()=>{ document.getElementById('chatInput').value=''; document.getElementById('chatModal').classList.add('open'); document.getElementById('chatInput').focus(); };
 document.getElementById('chatCancel').onclick=()=>document.getElementById('chatModal').classList.remove('open');
-document.getElementById('chatModal').addEventListener('click',e=>{ if(e.target.id==='chatModal') e.currentTarget.classList.remove('open'); });
+/* Hintergrund-Klick schließt das Chat-Fenster NICHT – kein Datenverlust. Schließen nur über Abbrechen. */
 document.getElementById('chatParse').onclick=()=>{
   const t=document.getElementById('chatInput').value.trim(); if(!t){ alert('Bitte zuerst etwas zum Kunden eingeben.'); return; }
   document.getElementById('chatModal').classList.remove('open');
@@ -978,28 +991,62 @@ function parseCustomerText(t){
   return o;
 }
 
-/* ---------- PDF-Rechnung importieren (Verbindlichkeit) ---------- */
+/* ---------- Rechnung importieren (PDF/Bild) – Forderung & Verbindlichkeit ---------- */
 if(window.pdfjsLib){ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }
+const fileToDataUrl=f=>new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); });
+async function pdfPageToDataUrl(page){
+  const vp=page.getViewport({scale:2});
+  const c=document.createElement('canvas'); c.width=vp.width; c.height=vp.height;
+  await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+  return c.toDataURL('image/png');
+}
+async function ocr(url, setMsg){
+  if(!window.Tesseract) throw new Error('ocr');
+  const {data}=await Tesseract.recognize(url,'deu',{logger:m=>{ if(m.status==='recognizing text'&&setMsg) setMsg('Texterkennung '+Math.round(m.progress*100)+'%'); }});
+  return data.text||'';
+}
+async function extractPdfText(pdf){
+  let text='';
+  for(let i=1;i<=pdf.numPages;i++){
+    const page=await pdf.getPage(i); const tc=await page.getTextContent();
+    const rows={};
+    tc.items.forEach(it=>{ if(!it.transform) return; const y=Math.round(it.transform[5]); (rows[y]=rows[y]||[]).push({x:it.transform[4],s:it.str}); });
+    const ys=Object.keys(rows).map(Number).sort((a,b)=>b-a);
+    text+=ys.map(y=>rows[y].sort((a,b)=>a.x-b.x).map(o=>o.s).join(' ').replace(/\s+/g,' ').trim()).filter(Boolean).join('\n')+'\n';
+  }
+  return text;
+}
 document.getElementById('pdfBtn').onclick=()=>document.getElementById('pdfFile').click();
 document.getElementById('pdfFile').onchange=async e=>{
   const file=e.target.files[0]; if(!file) return;
-  const btn=document.getElementById('pdfBtn'); const orig=btn.innerHTML; btn.innerHTML='<i class="ti ti-loader-2"></i> Analysiere…'; btn.disabled=true;
+  const btn=document.getElementById('pdfBtn'); const orig=btn.innerHTML; btn.disabled=true;
+  const setMsg=m=>btn.innerHTML='<i class="ti ti-loader-2"></i> '+m;
+  const typ=(document.querySelector('#finTabs button.active')||{}).dataset?.tab||'Verbindlichkeit';
+  setMsg('Analysiere…');
   try{
-    if(!window.pdfjsLib) throw new Error('pdfjs');
-    const buf=await file.arrayBuffer();
-    const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+    const isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
     let text='';
-    for(let i=1;i<=pdf.numPages;i++){
-      const page=await pdf.getPage(i); const tc=await page.getTextContent();
-      const rows={};
-      tc.items.forEach(it=>{ if(!it.transform) return; const y=Math.round(it.transform[5]); (rows[y]=rows[y]||[]).push({x:it.transform[4],s:it.str}); });
-      const ys=Object.keys(rows).map(Number).sort((a,b)=>b-a);
-      text+=ys.map(y=>rows[y].sort((a,b)=>a.x-b.x).map(o=>o.s).join(' ').replace(/\s+/g,' ').trim()).filter(Boolean).join('\n')+'\n';
+    if(isPdf){
+      if(!window.pdfjsLib) throw new Error('pdfjs');
+      const buf=await file.arrayBuffer();
+      const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+      text=await extractPdfText(pdf);
+      if(text.replace(/\s/g,'').length<25){ // kein/zu wenig Text → gescannt → OCR
+        setMsg('Texterkennung…'); text='';
+        for(let i=1;i<=Math.min(pdf.numPages,3);i++){ const url=await pdfPageToDataUrl(await pdf.getPage(i)); text+=await ocr(url,setMsg)+'\n'; }
+      }
+    } else { // Bilddatei (Foto/Scan)
+      setMsg('Texterkennung…');
+      text=await ocr(await fileToDataUrl(file), setMsg);
     }
-    if(!text.replace(/\s/g,'')){ alert('In dieser PDF wurde kein Text gefunden (vermutlich ein gescanntes Bild). Texterkennung (OCR) kommt in der Server-Version – bitte vorerst manuell erfassen.'); openForm('verbindlichkeiten',null,{}); return; }
-    const preset=parseInvoiceText(text); preset.beschreibung='Importiert aus '+file.name;
-    openForm('verbindlichkeiten',null,preset);
-  }catch(err){ alert('PDF konnte nicht gelesen werden'+(err&&err.message==='pdfjs'?' (PDF-Modul nicht geladen – Internetverbindung nötig).':'.')); }
+    const preset=parseInvoiceText(text); preset.typ=typ; preset.beschreibung='Importiert aus '+file.name;
+    if(!preset.netto && !preset.betrag && !preset.nr){ alert('Es konnten nur wenige Daten erkannt werden – bitte im Formular ergänzen/korrigieren.'); }
+    openForm('rechnungimport', null, preset);
+  }catch(err){
+    const m=err&&err.message;
+    alert('Datei konnte nicht analysiert werden'+(m==='pdfjs'?' (PDF-Modul nicht geladen – Internet nötig).':m==='ocr'?' (Texterkennung nicht geladen – Internet nötig).':'.')+' Du kannst die Daten im Formular manuell eintragen.');
+    openForm('rechnungimport', null, {typ});
+  }
   finally{ btn.innerHTML=orig; btn.disabled=false; e.target.value=''; }
 };
 function deToIso(s){ const m=s.match(/(\d{1,2})[.\/](\d{1,2})[.\/](\d{2,4})/); if(!m) return ''; let d=m[1],mo=m[2],y=m[3]; if(y.length===2) y='20'+y; return y+'-'+mo.padStart(2,'0')+'-'+d.padStart(2,'0'); }
