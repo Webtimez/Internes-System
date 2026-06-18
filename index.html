@@ -517,6 +517,8 @@ const SB_URL='https://lwqgylsyrarhgaxbrzvm.supabase.co';
 const SB_KEY='sb_publishable_ICakPCjSIwgKk3RBLQiixw_cSJgQnwc';
 const sb = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
 const TABLE={kunden:'kunden',rechnungen:'rechnungen',lieferanten:'anbieter',personal:'personal',aufgaben:'aufgaben',termine:'termine'};
+const SELECT={rechnungen:'id,typ,nr,partner,kunde_id,datum,faellig,leistung,netto,ust_satz,betrag,status,beschreibung,beleg_name,created_at'};
+let pendingBeleg=null;
 const NUMF={kunden:['zahlungsziel'],rechnungen:['netto','ust_satz','betrag'],lieferanten:['kosten'],personal:['resturlaub']};
 const DATEF={rechnungen:['datum','faellig'],lieferanten:['naechste'],personal:['eintritt'],aufgaben:['faellig'],termine:['datum']};
 function toDb(key,o){ const d={...o}; delete d.id; delete d.created_at;
@@ -531,9 +533,14 @@ async function dbUpdate(key,id,o){ const {data,error}=await sb.from(TABLE[key]).
 async function dbDelete(key,id){ const {error}=await sb.from(TABLE[key]).delete().eq('id',id); if(error) throw error; }
 async function saveSettings(){ if(sb) await sb.from('settings').upsert({id:1,data:store.settings}); }
 async function loadAll(){
-  for(const key of Object.keys(TABLE)){ const {data,error}=await sb.from(TABLE[key]).select('*').order('created_at',{ascending:true}); if(!error&&data) store[key]=data.map(r=>fromDb(key,r)); }
+  for(const key of Object.keys(TABLE)){ const {data,error}=await sb.from(TABLE[key]).select(SELECT[key]||'*').order('created_at',{ascending:true}); if(!error&&data) store[key]=data.map(r=>fromDb(key,r)); }
   const {data:s}=await sb.from('settings').select('data').eq('id',1).maybeSingle(); store.settings=(s&&s.data)||{};
   renderAll();
+}
+async function downloadBeleg(id){
+  const {data,error}=await sb.from('rechnungen').select('beleg,beleg_name').eq('id',id).single();
+  if(error||!data||!data.beleg){ alert('Kein Beleg hinterlegt.'); return; }
+  const a=document.createElement('a'); a.href=data.beleg; a.download=data.beleg_name||'beleg.pdf'; a.click();
 }
 
 function invPill(r){
@@ -597,7 +604,14 @@ function renderUst(){
       <div class="stat" style="cursor:default"><div class="l">${saldo>=0?'Voraussichtl. Erstattung':'Voraussichtl. Zahllast'}</div><div class="v" style="color:${saldo>=0?'var(--green)':'var(--red)'}">${fmt(Math.abs(saldo))}</div></div>
     </div>
     <table style="margin-top:6px"><thead><tr><th>USt-Satz</th><th class="num">Vorsteuer (Eingang)</th><th class="num">Vereinnahmt (Ausgang)</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="hint" style="margin-top:10px">Vorsteuer = USt aus euren Eingangsrechnungen (bekommt ihr verrechnet/zurück). Vereinnahmte USt = USt aus euren Ausgangsrechnungen (führt ihr ab). Saldo = Differenz am Jahresende. Orientierungswerte, keine Steuerberatung.</p>`;
+    <h3 style="font-size:14px;margin:20px 0 8px">Belege für die Steuererklärung (Vorsteuer)</h3>
+    ${vorsteuerBelegList(verb)}
+    <p class="hint" style="margin-top:10px">Vorsteuer = USt aus euren Eingangsrechnungen (bekommt ihr verrechnet/zurück). Diese Rechnungen lädst du fürs Finanzamt hoch – PDF hier herunterladen. Orientierungswerte, keine Steuerberatung.</p>`;
+}
+function vorsteuerBelegList(verb){
+  const list=verb.filter(r=>ustOf(r)>0).sort((a,b)=>(parseD(a.datum)||0)-(parseD(b.datum)||0));
+  if(!list.length) return '<div class="hint">Noch keine Vorsteuer-Rechnungen erfasst.</div>';
+  return list.map(r=>`<div class="row"><span class="grow">${esc(r.nr||'–')} · ${esc(r.partner||'')} · ${fmtD(r.datum)}</span><span style="margin:0 12px;white-space:nowrap">USt ${fmt(ustOf(r))}</span>${r.beleg_name?`<span class="link" data-beleg="${r.id}"><i class="ti ti-download"></i> PDF</span>`:'<span class="pill amber">Beleg fehlt</span>'}</div>`).join('');
 }
 const dashFilter={Forderung:'offen', Verbindlichkeit:'offen'};
 function renderDash(){
@@ -720,11 +734,12 @@ document.getElementById('modalSave').onclick=async ()=>{
     const d=deriveAmounts(obj);
     obj.netto=d.netto; obj.betrag=d.betrag; obj.ustSatz=d.ustSatz;
     delete obj.ustBetrag;
+    if(formSchema==='rechnungimport' && !formId && pendingBeleg){ obj.beleg=pendingBeleg.data; obj.beleg_name=pendingBeleg.name; }
   }
   try{
     if(formId){ const row=await dbUpdate(formEntity,formId,obj); const i=store[formEntity].findIndex(r=>r.id===formId); store[formEntity][i]=row; }
     else { const row=await dbInsert(formEntity,obj); store[formEntity].push(row); }
-    closeForm(); renderAll();
+    pendingBeleg=null; closeForm(); renderAll();
   }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
 };
 
@@ -1038,6 +1053,7 @@ document.getElementById('pdfFile').onchange=async e=>{
   const typ=(document.querySelector('#finTabs button.active')||{}).dataset?.tab||'Verbindlichkeit';
   setMsg('Analysiere…');
   try{
+    pendingBeleg={data:await fileToDataUrl(file), name:file.name};
     const isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
     let text='';
     if(isPdf){
@@ -1113,6 +1129,7 @@ function parseInvoiceText(t){
 }));
 document.getElementById('dashForderungen').addEventListener('click',e=>{ const c=e.target.closest('[data-cust]'); if(c) openCustomer(c.dataset.cust); });
 document.getElementById('dashVerbindlichkeiten').addEventListener('click',e=>{ const v=e.target.closest('[data-vb]'); if(v) openForm('verbindlichkeiten', v.dataset.vb); });
+document.getElementById('ustOverview').addEventListener('click',e=>{ const b=e.target.closest('[data-beleg]'); if(b) downloadBeleg(b.dataset.beleg); });
 
 /* ---------- Login / Start ---------- */
 async function logout(){ if(sb) await sb.auth.signOut(); location.reload(); }
