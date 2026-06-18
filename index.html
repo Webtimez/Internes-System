@@ -251,7 +251,7 @@
             <div id="dueList"></div>
           </div>
           <div class="card">
-            <div class="head"><h3><i class="ti ti-checklist" style="color:var(--pink); vertical-align:-2px; margin-right:6px;"></i>Offene Aufgaben</h3></div>
+            <div class="head"><h3><i class="ti ti-checklist" style="color:var(--pink); vertical-align:-2px; margin-right:6px;"></i>Meine offenen Aufgaben</h3></div>
             <div id="todoMini"></div>
           </div>
         </div>
@@ -315,6 +315,10 @@
       </section>
 
       <section class="view" id="view-todo">
+        <div class="tabs" id="todoScope" style="margin-bottom:14px">
+          <button class="active" data-scope="mine">Meine Aufgaben</button>
+          <button data-scope="all">Alle Aufgaben</button>
+        </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
           <input id="todoSearch" placeholder="Suche: Aufgabe / Thema…" style="flex:1;min-width:180px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px">
           <select id="todoPrio" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px"><option value="">Alle Prioritäten</option><option>Hoch</option><option>Mittel</option><option>Niedrig</option></select>
@@ -810,7 +814,9 @@ function renderDash(){
   document.getElementById('dueList').innerHTML = due.length
     ? due.map(r=>`<div class="row"><span class="date">${fmtD(r.faellig)}</span><span class="grow">${r.typ==='Verbindlichkeit'?'↑ ':'↓ '}${esc(r.nr||'')} · ${esc(r.partner||'')}</span><span>${fmt(r.betrag)}</span></div>`).join('')
     : emptyState('Keine anstehenden Fälligkeiten.','ti-calendar');
-  renderTodoList('todoMini', store.aufgaben.filter(a=>!a.done).slice(0,5));
+  const pr={Hoch:0,Mittel:1,Niedrig:2};
+  const mine=store.aufgaben.filter(a=>!a.done && a.zugewiesen_id===MY_ID).sort((a,b)=>((pr[a.prio]??1)-(pr[b.prio]??1))||((parseD(a.faellig)||Infinity)-(parseD(b.faellig)||Infinity)));
+  renderTodoList('todoMini', mine.slice(0,5));
   renderUst();
 }
 function renderTodoList(el,list){
@@ -829,7 +835,10 @@ function renderTodoView(){
   const prio=document.getElementById('todoPrio').value;
   const asg=document.getElementById('todoAssignee').value;
   const zeit=document.getElementById('todoZeit').value;
+  const scopeBtn=document.querySelector('#todoScope button.active'); const scope=scopeBtn?scopeBtn.dataset.scope:'mine';
+  const prioRank={Hoch:0,Mittel:1,Niedrig:2};
   const list=store.aufgaben.filter(a=>{
+    if(scope==='mine' && a.zugewiesen_id!==MY_ID) return false;
     if(q){ const pers=a.zugewiesen_id?(store.personal.find(p=>p.id===a.zugewiesen_id)||{}).name||'':''; if(!((a.text||'')+' '+pers).toLowerCase().includes(q)) return false; }
     if(prio && a.prio!==prio) return false;
     if(asg && a.zugewiesen_id!==asg) return false;
@@ -841,6 +850,10 @@ function renderTodoView(){
     if(zeit==='woche' && !(d!==null&&d>=0&&d<=7)) return false;
     if(zeit==='ohne' && a.faellig) return false;
     return true;
+  }).sort((a,b)=>{
+    if(!!a.done!==!!b.done) return a.done?1:-1;
+    const pr=(prioRank[a.prio]??1)-(prioRank[b.prio]??1); if(pr) return pr;
+    return (parseD(a.faellig)||Infinity)-(parseD(b.faellig)||Infinity);
   });
   renderTodoList('todoFull', list);
 }
@@ -1214,6 +1227,7 @@ document.getElementById('finSearch').addEventListener('input', finRefresh);
 document.getElementById('finStatus').addEventListener('change', finRefresh);
 document.getElementById('liefSearch').addEventListener('input', renderLief);
 document.getElementById('liefKat').addEventListener('change', renderLief);
+document.getElementById('todoScope').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b){ document.querySelectorAll('#todoScope button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); renderTodoView(); } });
 document.getElementById('calHits').addEventListener('click',e=>{ const j=e.target.closest('[data-caljump]'); if(j){ const d=parseD(j.dataset.caljump); if(d){ calY=d.getFullYear(); calM=d.getMonth(); renderCal(); } } });
 
 /* ---------- Export / Import ---------- */
