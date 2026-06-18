@@ -208,7 +208,7 @@
       <a data-view="personal"><i class="ti ti-id-badge-2"></i> Personal</a>
       <a data-view="kalender"><i class="ti ti-calendar"></i> Kalender</a>
       <a data-view="todo"><i class="ti ti-checklist"></i> To-Do</a>
-      <a data-view="nachrichten"><i class="ti ti-message-circle"></i> Nachrichten</a>
+      <a data-view="nachrichten"><i class="ti ti-message-circle"></i> Nachrichten <span id="navUnread" class="unread" style="display:none;margin-left:auto"></span></a>
       <div class="navgroup">System</div>
       <a data-view="einstellungen"><i class="ti ti-settings"></i> Einstellungen</a>
     </nav>
@@ -309,6 +309,7 @@
             </div>
             <input id="calSearch" placeholder="Kalender durchsuchen (Stichwort, Teilnehmer…)" style="flex:1;max-width:340px;padding:8px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px">
           </div>
+          <div id="calInvites"></div>
           <div id="calHits"></div>
           <div class="cal" id="calGrid"></div>
         </div>
@@ -380,6 +381,11 @@
           <div class="head"><h3><i class="ti ti-key" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>Firmen-Zugänge & Passwörter</h3><button class="btn" id="firmaZugAdd"><i class="ti ti-plus"></i> Zugang</button></div>
           <p class="hint" style="margin-top:0">Eure eigenen Logins (Anbieter, Tools, Konten). Passwörter sind verdeckt – Auge zum Einblenden.</p>
           <div id="firmaZugList"></div>
+        </div>
+        <div class="card" id="rolesCard" style="display:none">
+          <div class="head"><h3><i class="ti ti-users-group" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>Team & Rollen</h3></div>
+          <p class="hint" style="margin-top:0">Admins sehen alles. „Mitarbeiter" sehen Finanzen und Personal nicht.</p>
+          <div id="rolesBox"></div>
         </div>
         <div class="card">
           <div class="head"><h3><i class="ti ti-notes" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>Interne Notizen</h3><button class="btn" id="internNotesSave">Speichern</button></div>
@@ -585,7 +591,7 @@ const SCHEMAS = {
     {k:'faellig', l:'Fällig am (optional)', t:'date', half:true},
     {k:'prio', l:'Priorität', t:'select', o:['Hoch','Mittel','Niedrig'], half:true},
     {k:'wiederholung', l:'Wiederholung', t:'select', o:['Keine','Täglich','Wöchentlich','Monatlich','Jährlich'], half:true},
-    {k:'zugewiesen_id', l:'Zugewiesen an', t:'select', dyn:'personal', half:true},
+    {k:'zugewiesen_id', l:'Zugewiesen an', t:'select', dyn:'profile', half:true},
   ]},
   termine:{ singular:'Termin', icon:'ti-calendar', fields:[
     {k:'titel', l:'Titel', t:'text', ph:'z. B. Steuertermin'},
@@ -638,7 +644,7 @@ const SET_FIELDS=[
 ];
 
 const KEY='webtimez_is_v2';
-let store = {rechnungen:[],kunden:[],lieferanten:[],personal:[],aufgaben:[],termine:[],belege:[],zugaenge:[],profiles:[],settings:{}};
+let store = {rechnungen:[],kunden:[],lieferanten:[],personal:[],aufgaben:[],termine:[],belege:[],zugaenge:[],profiles:[],teilnahme:[],settings:{}};
 const persist = () => { try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} };
 
 /* ---------- Supabase-Anbindung ---------- */
@@ -666,10 +672,12 @@ async function loadAll(){
   for(const key of Object.keys(TABLE)){ const {data,error}=await sb.from(TABLE[key]).select(SELECT[key]||'*').order('created_at',{ascending:true}); if(!error&&data) store[key]=data.map(r=>fromDb(key,r)); }
   const {data:b}=await sb.from('belege').select('id,name,groesse,kunde_id,created_at').order('created_at',{ascending:false}); store.belege=b||[];
   const {data:z}=await sb.from('zugaenge').select('*').order('created_at',{ascending:true}); store.zugaenge=z||[];
-  const {data:pf}=await sb.from('profiles').select('id,name,email').order('name'); store.profiles=pf||[];
+  const {data:pf}=await sb.from('profiles').select('id,name,email,rolle').order('name'); store.profiles=pf||[];
+  const {data:tt}=await sb.from('termin_teilnahme').select('*'); store.teilnahme=tt||[];
   try{ const {data:u}=await sb.auth.getUser(); MY_ID=u&&u.user?u.user.id:null; }catch(e){}
   const {data:s}=await sb.from('settings').select('data').eq('id',1).maybeSingle(); store.settings=(s&&s.data)||{};
   renderAll();
+  setupRealtime(); dailyReminder();
 }
 let MY_ID=null, MSG_PEER=null;
 function myName(){ const p=store.profiles.find(x=>x.id===MY_ID); return (p&&(p.name||p.email))||'ich'; }
@@ -835,13 +843,14 @@ function renderTodoList(el,list){
   if(!list.length){ document.getElementById(el).innerHTML=emptyState('Keine Aufgaben.','ti-checklist'); return; }
   const pc={Hoch:'red',Mittel:'amber',Niedrig:'gray'};
   document.getElementById(el).innerHTML=list.map(a=>{
-    const pers=a.zugewiesen_id?store.personal.find(p=>p.id===a.zugewiesen_id):null;
+    const pn=assigneeName(a.zugewiesen_id);
     const rep=a.wiederholung&&a.wiederholung!=='Keine'?a.wiederholung:'';
-    const meta=[pers?esc(pers.name):'', rep?('↻ '+rep):''].filter(Boolean).join(' · ');
+    const meta=[pn?esc(pn):'', rep?('↻ '+rep):''].filter(Boolean).join(' · ');
     return `<div class="row ${a.done?'done':''}"><i class="ti ${a.done?'ti-square-check':'ti-square'} check" data-todo="${a.id}"></i><span class="prio-dot prio-${a.prio||'Mittel'}" title="Priorität: ${a.prio||'Mittel'}"></span><span class="grow">${esc(a.text)}${meta?`<br><span style="color:var(--muted);font-size:11px">${meta}</span>`:''}</span>${a.faellig?`<span class="pill ${pc[a.prio]||'gray'}">${fmtD(a.faellig)}</span>`:`<span class="pill gray" style="font-size:11px">ohne Datum</span>`}<i class="ti ti-edit iconbtn" data-edit="aufgaben" data-id="${a.id}"></i><i class="ti ti-trash iconbtn" data-del="aufgaben" data-id="${a.id}"></i></div>`;
   }).join('');
 }
-function fillTodoAssignee(){ const sel=document.getElementById('todoAssignee'); if(!sel) return; const cur=sel.value; sel.innerHTML='<option value="">Alle Mitarbeiter</option>'+store.personal.map(p=>`<option value="${p.id}">${esc(p.name||'')}</option>`).join(''); sel.value=cur; }
+function assigneeName(id){ if(!id) return ''; const p=store.profiles.find(x=>x.id===id); if(p) return p.name||p.email||''; const pe=store.personal.find(x=>x.id===id); return pe?(pe.name||''):''; }
+function fillTodoAssignee(){ const sel=document.getElementById('todoAssignee'); if(!sel) return; const cur=sel.value; sel.innerHTML='<option value="">Alle Personen</option>'+store.profiles.map(p=>`<option value="${p.id}">${esc(p.name||p.email||'?')}</option>`).join(''); sel.value=cur; }
 function renderTodoView(){
   const q=(document.getElementById('todoSearch').value||'').toLowerCase();
   const prio=document.getElementById('todoPrio').value;
@@ -851,7 +860,7 @@ function renderTodoView(){
   const prioRank={Hoch:0,Mittel:1,Niedrig:2};
   const list=store.aufgaben.filter(a=>{
     if(scope==='mine' && a.zugewiesen_id!==MY_ID) return false;
-    if(q){ const pers=a.zugewiesen_id?(store.personal.find(p=>p.id===a.zugewiesen_id)||{}).name||'':''; if(!((a.text||'')+' '+pers).toLowerCase().includes(q)) return false; }
+    if(q){ const pers=assigneeName(a.zugewiesen_id); if(!((a.text||'')+' '+pers).toLowerCase().includes(q)) return false; }
     if(prio && a.prio!==prio) return false;
     if(asg && a.zugewiesen_id!==asg) return false;
     const d=daysTo(a.faellig);
@@ -926,7 +935,7 @@ function renderCal(){
   store.aufgaben.forEach(a=>{
     if(!a.faellig||a.done) return;
     const start=parseD(a.faellig); if(!start) return;
-    const pers=a.zugewiesen_id?(store.personal.find(p=>p.id===a.zugewiesen_id)||{}).name:''; const cls=prioCls[a.prio]||'gray';
+    const pers=assigneeName(a.zugewiesen_id); const cls=prioCls[a.prio]||'gray';
     if(q && !((a.text||'')+' '+(pers||'')).toLowerCase().includes(q)) return;
     const rep=a.wiederholung;
     for(let d=1; d<=days; d++){
@@ -951,7 +960,7 @@ function renderCalHits(q){
   const hits=[];
   store.rechnungen.forEach(r=>{ if(r.faellig){ const s=((r.nr||'')+' '+(r.partner||'')).toLowerCase(); if(s.includes(q)) hits.push({date:r.faellig,label:(r.nr||'')+' · '+(r.partner||''),typ:'Rechnung'}); }});
   store.termine.forEach(t=>{ const s=((t.titel||'')+' '+(t.teilnehmer||'')+' '+(t.typ||'')).toLowerCase(); if(s.includes(q)) hits.push({date:t.datum,label:(t.titel||'Termin')+(t.teilnehmer?' ('+t.teilnehmer+')':''),typ:t.typ||'Termin'}); });
-  store.aufgaben.forEach(a=>{ if(!a.faellig) return; const pers=a.zugewiesen_id?(store.personal.find(p=>p.id===a.zugewiesen_id)||{}).name:''; const s=((a.text||'')+' '+(pers||'')).toLowerCase(); if(s.includes(q)) hits.push({date:a.faellig,label:a.text||'Aufgabe',typ:'Aufgabe'}); });
+  store.aufgaben.forEach(a=>{ if(!a.faellig) return; const pers=assigneeName(a.zugewiesen_id); const s=((a.text||'')+' '+(pers||'')).toLowerCase(); if(s.includes(q)) hits.push({date:a.faellig,label:a.text||'Aufgabe',typ:'Aufgabe'}); });
   hits.sort((a,b)=>(parseD(a.date)||0)-(parseD(b.date)||0));
   el.innerHTML = hits.length
     ? '<div class="card" style="margin-bottom:14px;padding:10px 14px"><div class="hint" style="margin:0 0 6px">'+hits.length+' Treffer (klicken zum Springen):</div>'+hits.map(x=>`<div class="row" style="cursor:pointer" data-caljump="${x.date}"><span class="date">${fmtD(x.date)}</span><span class="grow">${esc(x.label)}</span><span class="pill gray" style="font-size:11px">${esc(x.typ)}</span></div>`).join('')+'</div>'
@@ -979,6 +988,7 @@ function renderAll(){
   renderFin(document.querySelector('#finTabs button.active').dataset.tab);
   renderCRM(); renderLief(); renderPers(); renderCal();
   fillTodoAssignee(); renderTodoView(); renderKundenList(); renderFirmenZugaenge(); updateIdentity();
+  renderInvites(); updateUnreadBadge(); applyRoleVisibility(); renderRoles();
 }
 
 /* ---------- Standard-Formular ---------- */
@@ -992,7 +1002,8 @@ function openForm(schemaKey, id, preset){
     let input;
     if(f.t==='select'){
       let optsHtml;
-      if(f.dyn==='personal') optsHtml='<option value="">— niemand —</option>'+store.personal.map(p=>`<option value="${p.id}" ${rec[f.k]===p.id?'selected':''}>${esc(p.name||'')}</option>`).join('');
+      if(f.dyn==='profile') optsHtml='<option value="">— niemand —</option>'+store.profiles.map(p=>`<option value="${p.id}" ${rec[f.k]===p.id?'selected':''}>${esc(p.name||p.email||'?')}</option>`).join('');
+      else if(f.dyn==='personal') optsHtml='<option value="">— niemand —</option>'+store.personal.map(p=>`<option value="${p.id}" ${rec[f.k]===p.id?'selected':''}>${esc(p.name||'')}</option>`).join('');
       else optsHtml=f.o.map(o=>`<option ${o===rec[f.k]?'selected':''}>${o}</option>`).join('');
       input=`<select name="${f.k}">${optsHtml}</select>`;
     }
@@ -1651,6 +1662,63 @@ document.getElementById('msgSend').onclick=sendMsg;
 document.getElementById('msgInput').addEventListener('keydown',e=>{ if(e.key==='Enter') sendMsg(); });
 document.getElementById('editMyName').onclick=async ()=>{ const n=prompt('Dein Anzeigename:', myName()); if(n==null) return; const nm=n.trim(); if(!nm) return; const {error}=await sb.from('profiles').update({name:nm}).eq('id',MY_ID); if(error){ alert('Fehler: '+(error.message||error)); return; } const p=store.profiles.find(x=>x.id===MY_ID); if(p) p.name=nm; renderNachrichten(); };
 setInterval(()=>{ if(currentView==='nachrichten' && MSG_PEER) openConversation(MSG_PEER); }, 8000);
+
+async function updateUnreadBadge(){
+  if(!sb||!MY_ID) return;
+  const {count}=await sb.from('nachrichten').select('id',{count:'exact',head:true}).eq('an',MY_ID).eq('gelesen',false);
+  const b=document.getElementById('navUnread'); if(b){ if(count){ b.textContent=count; b.style.display=''; } else b.style.display='none'; }
+}
+function renderInvites(){
+  const el=document.getElementById('calInvites'); if(!el) return;
+  const mine=store.teilnahme.filter(t=>t.user_id===MY_ID).map(t=>({t,term:store.termine.find(x=>x.id===t.termin_id)})).filter(x=>x.term).sort((a,b)=>(parseD(a.term.datum)||0)-(parseD(b.term.datum)||0));
+  if(!mine.length){ el.innerHTML=''; return; }
+  el.innerHTML='<div class="card" style="margin-bottom:14px;padding:12px 14px"><div style="font-weight:600;font-size:14px;margin-bottom:8px">Meine Termin-Einladungen</div>'+mine.map(x=>{
+    const st=x.t.status||'Eingeladen';
+    const pill = st==='Zugesagt'?'<span class="pill green">Zugesagt</span>':st==='Abgesagt'?'<span class="pill red">Abgesagt</span>':'<span class="pill amber">Offen</span>';
+    return `<div class="row" style="flex-wrap:wrap;gap:8px"><span class="date">${fmtD(x.term.datum)}</span><span class="grow">${esc(x.term.titel||'Termin')}</span>${pill}<button class="btn ghost" style="color:var(--green);padding:4px 9px" data-rsvp="${x.t.id}|Zugesagt">Zusagen</button><button class="btn ghost" style="color:var(--red);padding:4px 9px" data-rsvp="${x.t.id}|Abgesagt">Absagen</button></div>`;
+  }).join('')+'</div>';
+}
+document.getElementById('calInvites').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-rsvp]'); if(!b) return;
+  const parts=b.dataset.rsvp.split('|'); const id=parts[0], status=parts[1];
+  const {data,error}=await sb.from('termin_teilnahme').update({status}).eq('id',id).select().single();
+  if(error){ alert('Fehler: '+(error.message||error)); return; }
+  const i=store.teilnahme.findIndex(t=>t.id===id); if(i>=0) store.teilnahme[i]=data; renderInvites();
+});
+function myRole(){ const p=store.profiles.find(x=>x.id===MY_ID); return (p&&p.rolle)||'admin'; }
+function applyRoleVisibility(){
+  const admin=myRole()==='admin';
+  document.querySelectorAll('#nav a[data-view="finanzen"], #nav a[data-view="personal"]').forEach(a=>{ a.style.display=admin?'':'none'; });
+  const rc=document.getElementById('rolesCard'); if(rc) rc.style.display=admin?'':'none';
+}
+function renderRoles(){
+  const box=document.getElementById('rolesBox'); if(!box) return;
+  box.innerHTML=store.profiles.map(p=>`<div class="row" style="gap:10px"><span class="grow">${esc(p.name||p.email||'?')}${p.id===MY_ID?' (ich)':''}</span><select data-role="${p.id}" style="padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-size:13px"><option value="admin" ${(p.rolle||'admin')==='admin'?'selected':''}>Admin</option><option value="mitarbeiter" ${p.rolle==='mitarbeiter'?'selected':''}>Mitarbeiter</option></select></div>`).join('');
+}
+document.getElementById('rolesBox').addEventListener('change',async e=>{
+  const s=e.target.closest('[data-role]'); if(!s) return;
+  const {error}=await sb.from('profiles').update({rolle:s.value}).eq('id',s.dataset.role);
+  if(error){ alert('Fehler: '+(error.message||error)); return; }
+  const p=store.profiles.find(x=>x.id===s.dataset.role); if(p) p.rolle=s.value; applyRoleVisibility();
+});
+async function dailyReminder(){
+  if(!MY_ID) return;
+  const today=new Date().toISOString().slice(0,10); const flag='reminder_'+MY_ID+'_'+today;
+  try{ if(localStorage.getItem(flag)) return; }catch(e){}
+  const myTasks=store.aufgaben.filter(a=>!a.done && a.zugewiesen_id===MY_ID && a.faellig && daysTo(a.faellig)<=0);
+  const dueInv=store.rechnungen.filter(r=>r.faellig && !['Bezahlt','Storniert'].includes(r.status) && daysTo(r.faellig)<=0);
+  if(!myTasks.length && !dueInv.length){ try{localStorage.setItem(flag,'1');}catch(e){} return; }
+  const text='Tagesüberblick '+fmtD(today)+': '+myTasks.length+' Aufgabe(n) fällig/überfällig'+(dueInv.length?(', '+dueInv.length+' Rechnung(en) fällig/überfällig'):'')+'.';
+  try{ await sb.from('nachrichten').insert({von:MY_ID,an:MY_ID,text}); localStorage.setItem(flag,'1'); updateUnreadBadge(); }catch(e){}
+}
+let rtSet=false;
+function setupRealtime(){
+  if(rtSet||!sb) return; rtSet=true;
+  sb.channel('nachrichten-rt').on('postgres_changes',{event:'INSERT',schema:'public',table:'nachrichten'},payload=>{
+    const m=payload.new; if(!m) return;
+    if(m.an===MY_ID || m.von===MY_ID){ updateUnreadBadge(); if(currentView==='nachrichten' && MSG_PEER && (m.von===MSG_PEER||m.an===MSG_PEER)) openConversation(MSG_PEER); }
+  }).subscribe();
+}
 
 go('dashboard');
 (async ()=>{
