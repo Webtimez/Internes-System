@@ -136,7 +136,27 @@
   .inv-sum .grand{font-weight:700; border-top:2px solid #FF5CE0; margin-top:4px; padding-top:7px;}
   .inv-pay{margin-top:30px; font-size:11px; color:#555; line-height:1.6; border-top:1px solid #eee; padding-top:14px;}
   .demo-note{font-size:11px; color:var(--hint); margin-top:24px; text-align:center;}
-  @media(max-width:760px){ .sidebar{display:none;} }
+  .lrow{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:13px 14px; border:1px solid var(--border); border-bottom:none; cursor:pointer; background:var(--bg);}
+  .lrow:first-child{border-radius:var(--radius) var(--radius) 0 0;}
+  .lrow:last-child{border-bottom:1px solid var(--border); border-radius:0 0 var(--radius) var(--radius);}
+  .lrow:hover{background:var(--surface);}
+  .lname{font-weight:500; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .menubtn{display:none; background:none; border:none; font-size:24px; color:var(--text); cursor:pointer; padding:0 6px 0 0;}
+  .doclist .row .grow{font-size:13px;}
+  @media(max-width:760px){
+    .sidebar{position:fixed; top:0; left:0; bottom:0; z-index:60; transform:translateX(-100%); transition:transform .2s; box-shadow:0 0 30px rgba(0,0,0,.15);}
+    body.nav-open .sidebar{transform:translateX(0);}
+    body.nav-open::after{content:""; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:55;}
+    .menubtn{display:block;}
+    .content{padding:16px;}
+    .topbar{padding:12px 16px;}
+    .grid2{grid-template-columns:1fr;}
+    .field.half{width:100%; margin-right:0; display:block;}
+    #finTable, #liefTable, #persTable, #dashForderungen, #dashVerbindlichkeiten, #ustOverview, #crmGrid{overflow-x:auto;}
+    table{font-size:12px;}
+    .modal{padding:18px;}
+    .topbar .actions .btn span, .topbar h1{font-size:15px;}
+  }
 </style>
 </head>
 <body>
@@ -181,7 +201,10 @@
 
   <div class="main">
     <header class="topbar">
-      <h1 id="pageTitle">Dashboard</h1>
+      <div style="display:flex;align-items:center;gap:4px;min-width:0">
+        <button class="menubtn" id="menuBtn" aria-label="Menü"><i class="ti ti-menu-2"></i></button>
+        <h1 id="pageTitle">Dashboard</h1>
+      </div>
       <div class="actions">
         <button class="btn ghost" id="templateBtn" style="color:var(--text)"><i class="ti ti-file-invoice"></i> Rechnungsvorlage</button>
         <input type="file" id="importFile" accept="application/json" style="display:none">
@@ -230,6 +253,7 @@
           <button class="btn ghost" id="pdfBtn" style="color:var(--text)"><i class="ti ti-file-upload"></i> Rechnung hochladen (PDF/Bild)</button>
           <input type="file" id="pdfFile" accept="application/pdf,image/*" style="display:none">
           <input type="file" id="belegFile" accept="application/pdf,image/*" multiple style="display:none">
+          <input type="file" id="custDocFile" accept="application/pdf,image/*" multiple style="display:none">
         </div>
         <div class="card"><div id="finTable"></div></div>
       </section>
@@ -385,6 +409,7 @@
       <h3 id="custName" style="margin:0"></h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button type="button" class="btn ghost" style="color:var(--text)" id="custEdit"><i class="ti ti-edit"></i> Bearbeiten</button>
+        <button type="button" class="btn ghost" style="color:var(--red)" id="custDelete"><i class="ti ti-trash"></i></button>
         <button type="button" class="btn" id="custInvoice"><i class="ti ti-plus"></i> Neue Rechnung</button>
       </div>
     </div>
@@ -536,7 +561,7 @@ async function dbDelete(key,id){ const {error}=await sb.from(TABLE[key]).delete(
 async function saveSettings(){ if(sb) await sb.from('settings').upsert({id:1,data:store.settings}); }
 async function loadAll(){
   for(const key of Object.keys(TABLE)){ const {data,error}=await sb.from(TABLE[key]).select(SELECT[key]||'*').order('created_at',{ascending:true}); if(!error&&data) store[key]=data.map(r=>fromDb(key,r)); }
-  const {data:b}=await sb.from('belege').select('id,name,groesse,created_at').order('created_at',{ascending:false}); store.belege=b||[];
+  const {data:b}=await sb.from('belege').select('id,name,groesse,kunde_id,created_at').order('created_at',{ascending:false}); store.belege=b||[];
   const {data:s}=await sb.from('settings').select('data').eq('id',1).maybeSingle(); store.settings=(s&&s.data)||{};
   renderAll();
 }
@@ -551,9 +576,9 @@ async function downloadLibBeleg(id){
   if(error||!data||!data.data){ alert('Beleg nicht gefunden.'); return; }
   triggerDownload(data.data, data.name);
 }
-async function uploadBelegFile(file){
+async function uploadBelegFile(file, kundeId){
   const url=await fileToDataUrl(file);
-  const {data,error}=await sb.from('belege').insert({name:file.name,data:url,groesse:file.size}).select('id,name,groesse,created_at').single();
+  const {data,error}=await sb.from('belege').insert({name:file.name,data:url,groesse:file.size,kunde_id:kundeId||null}).select('id,name,groesse,kunde_id,created_at').single();
   if(error) throw error; store.belege.unshift(data); return data;
 }
 async function deleteBelegLib(id){
@@ -705,9 +730,7 @@ function renderCRM(){
     return va.localeCompare(vb,'de',{numeric:true});
   });
   if(!list.length){ grid.innerHTML=emptyState('Kein Kunde gefunden.','ti-users'); return; }
-  let h='<table><thead><tr><th>Firma</th><th>Ansprechpartner</th><th>PLZ</th><th>Ort</th><th>Status</th><th class="num">Offen</th><th class="act"></th></tr></thead><tbody>';
-  list.forEach(k=>{ h+=`<tr data-cust="${k.id}" style="cursor:pointer"><td style="font-weight:500">${esc(k.name)||'–'}</td><td>${esc(k.kontakt||'')||'–'}</td><td>${esc(k.plz||'')||'–'}</td><td>${esc(k.ort||'')||'–'}</td><td><span class="pill ${statusCls(k.status)}">${esc(k.status||'–')}</span></td><td class="num">${fmt(kundeOffen(k))}</td><td class="act"><i class="ti ti-eye iconbtn" data-cust="${k.id}" title="Details"></i><i class="ti ti-trash iconbtn" data-del="kunden" data-id="${k.id}"></i></td></tr>`; });
-  grid.innerHTML=h+'</tbody></table>';
+  grid.innerHTML=list.map(k=>`<div class="lrow" data-cust="${k.id}"><div class="lname">${esc(k.name)||'–'}</div><div style="display:flex;align-items:center;gap:10px"><span class="pill ${statusCls(k.status)}">${esc(k.status||'–')}</span><i class="ti ti-chevron-right" style="color:var(--hint)"></i></div></div>`).join('');
 }
 function renderSimple(entity,el,cols){
   const data=store[entity], schemaKey=entity==='rechnungen'?'verbindlichkeiten':entity;
@@ -968,7 +991,9 @@ function primaryClick(){
   else if(currentView==='finanzen' && document.querySelector('#finTabs button.active').dataset.tab==='Verbindlichkeit') openForm('verbindlichkeiten');
   else openGen();
 }
-document.getElementById('nav').addEventListener('click',e=>{ const a=e.target.closest('a'); if(a) go(a.dataset.view); });
+document.getElementById('nav').addEventListener('click',e=>{ const a=e.target.closest('a'); if(a){ go(a.dataset.view); document.body.classList.remove('nav-open'); } });
+document.getElementById('menuBtn').onclick=()=>document.body.classList.toggle('nav-open');
+document.addEventListener('click',e=>{ if(document.body.classList.contains('nav-open') && !e.target.closest('.sidebar') && !e.target.closest('#menuBtn')) document.body.classList.remove('nav-open'); });
 document.getElementById('primaryAction').onclick=primaryClick;
 document.addEventListener('click',e=>{
   const g=e.target.closest('[data-goto]'); if(g) go(g.dataset.goto);
@@ -1011,6 +1036,10 @@ function openCustomer(id){
   const invHtml = inv.length
     ? '<table style="margin-top:6px"><thead><tr><th>Nummer</th><th>Datum</th><th class="num">Betrag</th><th>Status</th></tr></thead><tbody>'+inv.map(r=>`<tr data-inv="${r.id}" style="cursor:pointer"><td>${esc(r.nr||'')}</td><td>${fmtD(r.datum)}</td><td class="num">${fmt(r.betrag)}</td><td>${invPill(r)}</td></tr>`).join('')+'</tbody></table>'
     : '<div class="hint" style="margin-top:6px">Noch keine Rechnungen für diesen Kunden.</div>';
+  const docs=store.belege.filter(b=>b.kunde_id===k.id);
+  const docList=docs.length
+    ? '<div class="doclist">'+docs.map(b=>`<div class="row"><span class="grow">${esc(b.name||'Datei')}</span><span style="color:var(--muted);font-size:12px;margin:0 10px">${fmtD(b.created_at)}</span><i class="ti ti-download iconbtn" data-libdl="${b.id}"></i><i class="ti ti-trash iconbtn" data-libdel="${b.id}"></i></div>`).join('')+'</div>'
+    : '<div class="hint">Noch keine Dokumente. Lade Rechnungen/Belege zu diesem Kunden hoch.</div>';
   document.getElementById('custBody').innerHTML=`
     ${row('Ansprechpartner',esc(k.kontakt||''))}
     ${row('E-Mail',k.email?`<a href="mailto:${esc(k.email)}" style="color:#1155CC">${esc(k.email)}</a>`:'')}
@@ -1020,14 +1049,29 @@ function openCustomer(id){
     ${row('Zahlungsziel',k.zahlungsziel?esc(k.zahlungsziel)+' Tage':'')}
     ${row('Offener Betrag',`<b>${fmt(kundeOffen(k))}</b>`)}
     ${row('Notiz',esc(k.notiz||'').replace(/\n/g,'<br>'))}
-    <h3 style="font-size:14px;margin:20px 0 0">Rechnungen</h3>${invHtml}`;
+    <h3 style="font-size:14px;margin:20px 0 0">Rechnungen</h3>${invHtml}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 6px"><h3 style="font-size:14px;margin:0">Dokumente / Belege</h3><button class="btn ghost" style="color:var(--text)" id="custDocUpload"><i class="ti ti-upload"></i> Hochladen</button></div>
+    ${docList}`;
   document.getElementById('custModal').classList.add('open');
 }
 document.getElementById('custClose').onclick=()=>document.getElementById('custModal').classList.remove('open');
 document.getElementById('custModal').addEventListener('click',e=>{ if(e.target.id==='custModal') e.currentTarget.classList.remove('open'); });
 document.getElementById('custEdit').onclick=()=>{ document.getElementById('custModal').classList.remove('open'); openForm('kunden',currentCust); };
 document.getElementById('custInvoice').onclick=()=>{ document.getElementById('custModal').classList.remove('open'); openGenForm(currentCust,null); };
-document.getElementById('custBody').addEventListener('click',e=>{ const v=e.target.closest('[data-inv]'); if(v){ document.getElementById('custModal').classList.remove('open'); openInvoice(v.dataset.inv); } });
+document.getElementById('custDelete').onclick=()=>{ if(confirm('Kunden löschen?')) dbDelete('kunden',currentCust).then(()=>{ store.kunden=store.kunden.filter(x=>x.id!==currentCust); document.getElementById('custModal').classList.remove('open'); renderAll(); }).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); };
+document.getElementById('custBody').addEventListener('click',e=>{
+  const v=e.target.closest('[data-inv]'); if(v){ document.getElementById('custModal').classList.remove('open'); openInvoice(v.dataset.inv); return; }
+  const dl=e.target.closest('[data-libdl]'); if(dl){ downloadLibBeleg(dl.dataset.libdl); return; }
+  const del=e.target.closest('[data-libdel]'); if(del){ if(confirm('Dokument löschen?')) deleteBelegLib(del.dataset.libdel).then(()=>openCustomer(currentCust)).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); return; }
+  if(e.target.closest('#custDocUpload')) document.getElementById('custDocFile').click();
+});
+document.getElementById('custDocFile').onchange=async e=>{
+  const files=[...e.target.files]; if(!files.length||!currentCust) return;
+  const btn=document.getElementById('custDocUpload'); if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> Lädt…'; }
+  try{ for(const f of files) await uploadBelegFile(f, currentCust); openCustomer(currentCust); renderDash(); }
+  catch(err){ alert('Upload fehlgeschlagen: '+(err.message||err)); }
+  finally{ e.target.value=''; }
+};
 
 /* ---------- CRM-Toolbar & Chat ---------- */
 document.getElementById('crmSearch').oninput=renderCRM;
