@@ -148,7 +148,15 @@
   .lname{font-weight:500; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .menubtn{display:none; background:none; border:none; font-size:24px; color:var(--text); cursor:pointer; padding:0 6px 0 0;}
   .doclist .row .grow{font-size:13px;}
+  .msgp{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:11px 13px; border-bottom:1px solid var(--border); cursor:pointer;}
+  .msgp:hover{background:var(--surface);} .msgp.active{background:var(--pink-tint);}
+  .bubble{max-width:78%; padding:8px 11px; border-radius:12px; font-size:13px; line-height:1.4;}
+  .bubble.me{align-self:flex-end; background:var(--pink); color:#fff; border-bottom-right-radius:4px;}
+  .bubble.them{align-self:flex-start; background:var(--surface); border-bottom-left-radius:4px;}
+  .bubble .t{font-size:10px; opacity:.7; margin-top:3px;}
+  .unread{background:var(--pink); color:#fff; font-size:10px; border-radius:10px; padding:1px 7px;}
   @media(max-width:760px){
+    #msgWrap{grid-template-columns:1fr !important;}
     .sidebar{position:fixed; top:0; left:0; bottom:0; z-index:60; transform:translateX(-100%); transition:transform .2s; box-shadow:0 0 30px rgba(0,0,0,.15);}
     body.nav-open .sidebar{transform:translateX(0);}
     body.nav-open::after{content:""; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:55;}
@@ -178,6 +186,7 @@
     <input id="authPw" type="password" autocomplete="current-password" style="width:100%;padding:10px 12px;border:1px solid #ECECEE;border-radius:8px;font-size:14px;margin:5px 0 6px">
     <div id="authErr" style="font-size:12px;color:#A32D2D;min-height:16px;margin-bottom:8px"></div>
     <button id="authBtn" style="width:100%;background:#FF5CE0;color:#fff;border:none;padding:11px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer">Anmelden</button>
+    <div style="text-align:center;margin-top:12px;font-size:13px;color:#6E6E73"><span id="authToggle" style="color:#9A0086;cursor:pointer">Neues Konto erstellen</span></div>
   </div>
 </div>
 
@@ -199,6 +208,7 @@
       <a data-view="personal"><i class="ti ti-id-badge-2"></i> Personal</a>
       <a data-view="kalender"><i class="ti ti-calendar"></i> Kalender</a>
       <a data-view="todo"><i class="ti ti-checklist"></i> To-Do</a>
+      <a data-view="nachrichten"><i class="ti ti-message-circle"></i> Nachrichten</a>
       <div class="navgroup">System</div>
       <a data-view="einstellungen"><i class="ti ti-settings"></i> Einstellungen</a>
     </nav>
@@ -302,6 +312,23 @@
           <select id="todoZeit" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px"><option value="">Alle</option><option value="offen">Nur offene</option><option value="erledigt">Nur erledigte</option><option value="ueber">Überfällig</option><option value="heute">Heute</option><option value="woche">Diese Woche</option><option value="ohne">Ohne Datum</option></select>
         </div>
         <div class="card"><div id="todoFull"></div></div>
+      </section>
+
+      <section class="view" id="view-nachrichten">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+          <div class="hint" style="margin:0">Angemeldet als <b id="myName">…</b> <span class="link" id="editMyName">(Name ändern)</span></div>
+        </div>
+        <div style="display:grid;grid-template-columns:240px 1fr;gap:16px" id="msgWrap">
+          <div class="card" style="padding:0;overflow:hidden"><div id="msgPeople"></div></div>
+          <div class="card" style="display:flex;flex-direction:column;min-height:420px">
+            <div id="msgHeader" style="font-weight:600;font-size:15px;padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:10px">Wähle links eine Person</div>
+            <div id="msgThread" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;max-height:420px"></div>
+            <div id="msgInputRow" style="display:none;gap:8px;margin-top:10px">
+              <input id="msgInput" placeholder="Nachricht schreiben…" style="flex:1;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+              <button class="btn" id="msgSend"><i class="ti ti-send"></i></button>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section class="view" id="view-einstellungen">
@@ -585,7 +612,7 @@ const SET_FIELDS=[
 ];
 
 const KEY='webtimez_is_v2';
-let store = {rechnungen:[],kunden:[],lieferanten:[],personal:[],aufgaben:[],termine:[],belege:[],zugaenge:[],settings:{}};
+let store = {rechnungen:[],kunden:[],lieferanten:[],personal:[],aufgaben:[],termine:[],belege:[],zugaenge:[],profiles:[],settings:{}};
 const persist = () => { try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} };
 
 /* ---------- Supabase-Anbindung ---------- */
@@ -613,9 +640,13 @@ async function loadAll(){
   for(const key of Object.keys(TABLE)){ const {data,error}=await sb.from(TABLE[key]).select(SELECT[key]||'*').order('created_at',{ascending:true}); if(!error&&data) store[key]=data.map(r=>fromDb(key,r)); }
   const {data:b}=await sb.from('belege').select('id,name,groesse,kunde_id,created_at').order('created_at',{ascending:false}); store.belege=b||[];
   const {data:z}=await sb.from('zugaenge').select('*').order('created_at',{ascending:true}); store.zugaenge=z||[];
+  const {data:pf}=await sb.from('profiles').select('id,name,email').order('name'); store.profiles=pf||[];
+  try{ const {data:u}=await sb.auth.getUser(); MY_ID=u&&u.user?u.user.id:null; }catch(e){}
   const {data:s}=await sb.from('settings').select('data').eq('id',1).maybeSingle(); store.settings=(s&&s.data)||{};
   renderAll();
 }
+let MY_ID=null, MSG_PEER=null;
+function myName(){ const p=store.profiles.find(x=>x.id===MY_ID); return (p&&p.name)||'ich'; }
 function triggerDownload(dataUrl,name){ const a=document.createElement('a'); a.href=dataUrl; a.download=name||'beleg.pdf'; a.click(); }
 async function downloadInlineBeleg(id){
   const {data,error}=await sb.from('rechnungen').select('beleg,beleg_name').eq('id',id).single();
@@ -1091,7 +1122,7 @@ document.getElementById('sendModal').addEventListener('click',e=>{ if(e.target.i
 document.getElementById('sendConfirm').onclick=()=>{ document.getElementById('sendModal').classList.remove('open'); sendInvoice(sendId); };
 
 /* ---------- Navigation ---------- */
-const titles={dashboard:'Dashboard',finanzen:'Finanzen',crm:'CRM / Kunden',lieferanten:'Anbieter',personal:'Personal',kalender:'Kalender',todo:'To-Do',einstellungen:'Einstellungen',intern:'Unternehmensinterne Daten'};
+const titles={dashboard:'Dashboard',finanzen:'Finanzen',crm:'CRM / Kunden',lieferanten:'Anbieter',personal:'Personal',kalender:'Kalender',todo:'To-Do',nachrichten:'Nachrichten',einstellungen:'Einstellungen',intern:'Unternehmensinterne Daten'};
 let currentView='dashboard';
 function go(view){
   currentView=view;
@@ -1103,7 +1134,8 @@ function go(view){
   const pa=document.getElementById('primaryAction');
   const map={crm:'Neuer Kunde',lieferanten:'Neuer Anbieter',personal:'Neue Person',todo:'Neue Aufgabe',kalender:'Neuer Termin'};
   if(view==='intern'){ const t=document.getElementById('internNotes'); if(t) t.value=(store.settings&&store.settings.interneNotizen)||''; }
-  if(view==='dashboard'||view==='einstellungen'||view==='intern'){ pa.style.display='none'; return; }
+  if(view==='nachrichten') renderNachrichten();
+  if(view==='dashboard'||view==='einstellungen'||view==='intern'||view==='nachrichten'){ pa.style.display='none'; return; }
   const finTab=view==='finanzen'?document.querySelector('#finTabs button.active').dataset.tab:null;
   if(view==='finanzen'){ document.getElementById('pdfBtn').style.display=finTab==='Belege'?'none':''; }
   if(finTab==='Belege'){ pa.style.display='none'; return; }
@@ -1454,19 +1486,70 @@ document.getElementById('belegFile').onchange=async e=>{
 /* ---------- Login / Start ---------- */
 async function logout(){ if(sb) await sb.auth.signOut(); location.reload(); }
 document.getElementById('logoutBtn').onclick=logout;
+let authMode='login';
+document.getElementById('authToggle').onclick=()=>{
+  authMode = authMode==='login' ? 'register' : 'login';
+  document.getElementById('authBtn').textContent = authMode==='login'?'Anmelden':'Konto erstellen';
+  document.getElementById('authToggle').textContent = authMode==='login'?'Neues Konto erstellen':'Zurück zum Login';
+  document.getElementById('authErr').textContent='';
+};
 document.getElementById('authBtn').onclick=async ()=>{
   const errEl=document.getElementById('authErr'); errEl.textContent='';
   if(!sb){ errEl.textContent='Supabase nicht geladen (Internetverbindung nötig).'; return; }
   const email=document.getElementById('authEmail').value.trim();
   const password=document.getElementById('authPw').value;
-  const btn=document.getElementById('authBtn'); btn.disabled=true; btn.textContent='Anmelden…';
+  const btn=document.getElementById('authBtn'); btn.disabled=true; const lbl=btn.textContent; btn.textContent='…';
+  if(authMode==='register'){
+    const {data,error}=await sb.auth.signUp({email,password});
+    btn.disabled=false; btn.textContent=lbl;
+    if(error){ errEl.textContent='Registrierung fehlgeschlagen: '+error.message; return; }
+    if(data.session){ document.getElementById('authOverlay').style.display='none'; await loadAll(); }
+    else { errEl.style.color='#3B6D11'; errEl.textContent='Konto erstellt. Falls eine Bestätigungsmail kommt, bitte bestätigen – danach anmelden.'; }
+    return;
+  }
   const {error}=await sb.auth.signInWithPassword({email,password});
-  btn.disabled=false; btn.textContent='Anmelden';
+  btn.disabled=false; btn.textContent=lbl;
   if(error){ errEl.textContent='Login fehlgeschlagen: '+error.message; return; }
   document.getElementById('authOverlay').style.display='none';
   await loadAll();
 };
 document.getElementById('authPw').addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('authBtn').click(); });
+
+/* ---------- Nachrichten (Chat) ---------- */
+async function renderNachrichten(){
+  document.getElementById('myName').textContent=myName();
+  const others=store.profiles.filter(p=>p.id!==MY_ID);
+  const unread={};
+  try{ const {data}=await sb.from('nachrichten').select('von').eq('an',MY_ID).eq('gelesen',false); (data||[]).forEach(m=>{ unread[m.von]=(unread[m.von]||0)+1; }); }catch(e){}
+  const el=document.getElementById('msgPeople');
+  el.innerHTML = others.length ? others.map(p=>`<div class="msgp ${MSG_PEER===p.id?'active':''}" data-peer="${p.id}"><span>${esc(p.name||p.email||'?')}</span>${unread[p.id]?`<span class="unread">${unread[p.id]}</span>`:''}</div>`).join('') : '<div class="hint" style="padding:14px">Noch keine weiteren Nutzer. Sobald Kollegen ein eigenes Konto haben, erscheinen sie hier.</div>';
+  if(MSG_PEER) openConversation(MSG_PEER);
+}
+async function openConversation(peerId){
+  MSG_PEER=peerId;
+  document.querySelectorAll('#msgPeople .msgp').forEach(x=>x.classList.toggle('active', x.dataset.peer===peerId));
+  const peer=store.profiles.find(p=>p.id===peerId)||{};
+  document.getElementById('msgHeader').textContent=peer.name||peer.email||'Chat';
+  document.getElementById('msgInputRow').style.display='flex';
+  const {data,error}=await sb.from('nachrichten').select('*').or(`and(von.eq.${MY_ID},an.eq.${peerId}),and(von.eq.${peerId},an.eq.${MY_ID})`).order('created_at');
+  const th=document.getElementById('msgThread');
+  if(error){ th.innerHTML='<div class="hint">Nachrichten konnten nicht geladen werden.</div>'; return; }
+  th.innerHTML=(data||[]).map(m=>`<div class="bubble ${m.von===MY_ID?'me':'them'}">${esc(m.text||'')}<div class="t">${new Date(m.created_at).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div></div>`).join('')||'<div class="hint">Noch keine Nachrichten. Schreib die erste!</div>';
+  th.scrollTop=th.scrollHeight;
+  try{ await sb.from('nachrichten').update({gelesen:true}).eq('an',MY_ID).eq('von',peerId).eq('gelesen',false); }catch(e){}
+}
+async function sendMsg(){
+  const inp=document.getElementById('msgInput'); const text=inp.value.trim(); if(!text||!MSG_PEER||!MY_ID) return;
+  inp.value='';
+  const {error}=await sb.from('nachrichten').insert({von:MY_ID,an:MSG_PEER,text});
+  if(error){ alert('Senden fehlgeschlagen: '+(error.message||error)); return; }
+  openConversation(MSG_PEER);
+}
+document.getElementById('msgPeople').addEventListener('click',e=>{ const p=e.target.closest('[data-peer]'); if(p) openConversation(p.dataset.peer); });
+document.getElementById('msgSend').onclick=sendMsg;
+document.getElementById('msgInput').addEventListener('keydown',e=>{ if(e.key==='Enter') sendMsg(); });
+document.getElementById('editMyName').onclick=async ()=>{ const n=prompt('Dein Anzeigename:', myName()); if(n==null) return; const nm=n.trim(); if(!nm) return; const {error}=await sb.from('profiles').update({name:nm}).eq('id',MY_ID); if(error){ alert('Fehler: '+(error.message||error)); return; } const p=store.profiles.find(x=>x.id===MY_ID); if(p) p.name=nm; renderNachrichten(); };
+setInterval(()=>{ if(currentView==='nachrichten' && MSG_PEER) openConversation(MSG_PEER); }, 8000);
 
 go('dashboard');
 (async ()=>{
