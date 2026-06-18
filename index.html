@@ -96,14 +96,19 @@
   .crm-card .del{position:absolute; top:12px; right:12px;}
   .cal-head{display:flex; align-items:center; gap:14px; margin-bottom:14px;}
   .cal-head .nav-btn{cursor:pointer; color:var(--muted); font-size:20px;}
-  .cal{display:grid; grid-template-columns:repeat(7,1fr); gap:6px;}
+  .cal{display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; table-layout:fixed;}
   .cal .dow{font-size:12px; color:var(--muted); text-align:center; padding:4px 0;}
-  .cal .day{min-height:76px; border:1px solid var(--border); border-radius:var(--radius-sm); padding:6px; font-size:12px;}
+  .cal .day{min-height:76px; min-width:0; overflow:hidden; border:1px solid var(--border); border-radius:var(--radius-sm); padding:6px; font-size:12px;}
   .cal .day.empty{border:none; min-height:0; padding:0;}
   .cal .day .n{color:var(--muted);}
   .cal .day.today{border-color:var(--pink); background:var(--pink-tint);}
-  .ev{display:block; font-size:10px; padding:2px 5px; border-radius:5px; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .ev{display:flex; align-items:center; gap:4px; font-size:10px; padding:2px 5px; border-radius:5px; margin-top:3px; max-width:100%; overflow:hidden; white-space:nowrap;}
+  .ev .evt{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .ev .evd{width:6px; height:6px; border-radius:50%; flex-shrink:0;}
   .ev.red{background:var(--red-bg); color:var(--red);} .ev.amber{background:var(--amber-bg); color:var(--amber);} .ev.pink{background:var(--pink-tint); color:var(--pink-dark);}
+  .ev.gray{background:var(--gray-bg); color:var(--gray);} .ev.green{background:var(--green-bg); color:var(--green);}
+  .prio-dot{display:inline-block; width:9px; height:9px; border-radius:50%; flex-shrink:0;}
+  .prio-Hoch{background:var(--red);} .prio-Mittel{background:var(--amber);} .prio-Niedrig{background:var(--gray);}
   .modal-overlay{position:fixed; inset:0; background:rgba(0,0,0,.4); display:none; align-items:center; justify-content:center; z-index:50; padding:20px;}
   .modal-overlay.open{display:flex;}
   .modal{background:#fff; border-radius:14px; width:520px; max-width:100%; max-height:92vh; overflow:auto; padding:24px;}
@@ -276,16 +281,28 @@
 
       <section class="view" id="view-kalender">
         <div class="card">
-          <div class="cal-head">
-            <i class="ti ti-chevron-left nav-btn" id="calPrev"></i>
-            <h3 id="calTitle" style="margin:0; font-size:15px;"></h3>
-            <i class="ti ti-chevron-right nav-btn" id="calNext"></i>
+          <div class="cal-head" style="justify-content:space-between">
+            <div style="display:flex;align-items:center;gap:14px">
+              <i class="ti ti-chevron-left nav-btn" id="calPrev"></i>
+              <h3 id="calTitle" style="margin:0; font-size:15px;"></h3>
+              <i class="ti ti-chevron-right nav-btn" id="calNext"></i>
+            </div>
+            <input id="calSearch" placeholder="Kalender durchsuchen (Stichwort, Teilnehmer…)" style="flex:1;max-width:340px;padding:8px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px">
           </div>
+          <div id="calHits"></div>
           <div class="cal" id="calGrid"></div>
         </div>
       </section>
 
-      <section class="view" id="view-todo"><div class="card"><div id="todoFull"></div></div></section>
+      <section class="view" id="view-todo">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+          <input id="todoSearch" placeholder="Suche: Aufgabe / Thema…" style="flex:1;min-width:180px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+          <select id="todoPrio" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px"><option value="">Alle Prioritäten</option><option>Hoch</option><option>Mittel</option><option>Niedrig</option></select>
+          <select id="todoAssignee" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px"></select>
+          <select id="todoZeit" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px"><option value="">Alle</option><option value="offen">Nur offene</option><option value="erledigt">Nur erledigte</option><option value="ueber">Überfällig</option><option value="heute">Heute</option><option value="woche">Diese Woche</option><option value="ohne">Ohne Datum</option></select>
+        </div>
+        <div class="card"><div id="todoFull"></div></div>
+      </section>
 
       <section class="view" id="view-einstellungen">
         <div class="hubgrid">
@@ -521,6 +538,7 @@ const SCHEMAS = {
     {k:'titel', l:'Titel', t:'text', ph:'z. B. Steuertermin'},
     {k:'datum', l:'Datum', t:'date', half:true},
     {k:'typ', l:'Typ', t:'select', o:['Termin','Frist','Erinnerung'], half:true},
+    {k:'teilnehmer', l:'Teilnehmer', t:'text', ph:'z. B. Julius, Simon'},
   ]},
   rechnungimport:{ singular:'Rechnung (Import)', icon:'ti-receipt', entity:'rechnungen', fields:[
     {k:'typ', l:'Art', t:'select', o:['Verbindlichkeit','Forderung']},
@@ -746,8 +764,29 @@ function renderTodoList(el,list){
     const pers=a.zugewiesen_id?store.personal.find(p=>p.id===a.zugewiesen_id):null;
     const rep=a.wiederholung&&a.wiederholung!=='Keine'?a.wiederholung:'';
     const meta=[pers?esc(pers.name):'', rep?('↻ '+rep):''].filter(Boolean).join(' · ');
-    return `<div class="row ${a.done?'done':''}"><i class="ti ${a.done?'ti-square-check':'ti-square'} check" data-todo="${a.id}"></i><span class="grow">${esc(a.text)}${meta?`<br><span style="color:var(--muted);font-size:11px">${meta}</span>`:''}</span>${a.faellig?`<span class="pill ${pc[a.prio]||'gray'}">${fmtD(a.faellig)}</span>`:`<span class="pill gray" style="font-size:11px">ohne Datum</span>`}<i class="ti ti-trash iconbtn" data-del="aufgaben" data-id="${a.id}"></i></div>`;
+    return `<div class="row ${a.done?'done':''}"><i class="ti ${a.done?'ti-square-check':'ti-square'} check" data-todo="${a.id}"></i><span class="prio-dot prio-${a.prio||'Mittel'}" title="Priorität: ${a.prio||'Mittel'}"></span><span class="grow">${esc(a.text)}${meta?`<br><span style="color:var(--muted);font-size:11px">${meta}</span>`:''}</span>${a.faellig?`<span class="pill ${pc[a.prio]||'gray'}">${fmtD(a.faellig)}</span>`:`<span class="pill gray" style="font-size:11px">ohne Datum</span>`}<i class="ti ti-edit iconbtn" data-edit="aufgaben" data-id="${a.id}"></i><i class="ti ti-trash iconbtn" data-del="aufgaben" data-id="${a.id}"></i></div>`;
   }).join('');
+}
+function fillTodoAssignee(){ const sel=document.getElementById('todoAssignee'); if(!sel) return; const cur=sel.value; sel.innerHTML='<option value="">Alle Mitarbeiter</option>'+store.personal.map(p=>`<option value="${p.id}">${esc(p.name||'')}</option>`).join(''); sel.value=cur; }
+function renderTodoView(){
+  const q=(document.getElementById('todoSearch').value||'').toLowerCase();
+  const prio=document.getElementById('todoPrio').value;
+  const asg=document.getElementById('todoAssignee').value;
+  const zeit=document.getElementById('todoZeit').value;
+  const list=store.aufgaben.filter(a=>{
+    if(q){ const pers=a.zugewiesen_id?(store.personal.find(p=>p.id===a.zugewiesen_id)||{}).name||'':''; if(!((a.text||'')+' '+pers).toLowerCase().includes(q)) return false; }
+    if(prio && a.prio!==prio) return false;
+    if(asg && a.zugewiesen_id!==asg) return false;
+    const d=daysTo(a.faellig);
+    if(zeit==='offen' && a.done) return false;
+    if(zeit==='erledigt' && !a.done) return false;
+    if(zeit==='ueber' && !(d!==null&&d<0&&!a.done)) return false;
+    if(zeit==='heute' && d!==0) return false;
+    if(zeit==='woche' && !(d!==null&&d>=0&&d<=7)) return false;
+    if(zeit==='ohne' && a.faellig) return false;
+    return true;
+  });
+  renderTodoList('todoFull', list);
 }
 function custAddr(k){ return [k.strasse,[k.plz,k.ort].filter(Boolean).join(' ')].filter(Boolean).join('\n')||k.adresse||''; }
 function kundeOffen(k){ return store.rechnungen.filter(r=>r.typ==='Forderung'&&(r.kundeId===k.id||r.partner===k.name)&&!['Bezahlt','Storniert'].includes(r.status)).reduce((s,r)=>s+(Number(r.betrag)||0),0); }
@@ -782,34 +821,51 @@ function renderPers(){ renderSimple('personal','persTable',[{k:'name',l:'Name'},
 
 let calY=today.getFullYear(), calM=today.getMonth();
 const MN=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+const prioCls={Hoch:'red',Mittel:'amber',Niedrig:'gray'};
+function calSearchTerm(){ const el=document.getElementById('calSearch'); return (el&&el.value||'').trim().toLowerCase(); }
 function renderCal(){
   document.getElementById('calTitle').textContent=MN[calM]+' '+calY;
+  const q=calSearchTerm();
   const dows=['Mo','Di','Mi','Do','Fr','Sa','So'];
   let h=dows.map(d=>`<div class="dow">${d}</div>`).join('');
   const first=new Date(calY,calM,1).getDay(); const offset=(first+6)%7; const days=new Date(calY,calM+1,0).getDate();
   const evMap={};
-  const add=(dstr,label,cls)=>{ const d=parseD(dstr); if(d&&d.getFullYear()===calY&&d.getMonth()===calM){ (evMap[d.getDate()]=evMap[d.getDate()]||[]).push({label,cls}); }};
-  store.rechnungen.forEach(r=>{ if(r.faellig&&!['Bezahlt','Storniert'].includes(r.status)){ const dd=daysTo(r.faellig); add(r.faellig,(r.nr||r.partner||'Rechnung'),dd<0?'red':'amber'); }});
-  store.termine.forEach(t=>add(t.datum,t.titel||'Termin','pink'));
+  const add=(dstr,label,cls,search)=>{ if(q && !(label+' '+(search||'')).toLowerCase().includes(q)) return; const d=parseD(dstr); if(d&&d.getFullYear()===calY&&d.getMonth()===calM){ (evMap[d.getDate()]=evMap[d.getDate()]||[]).push({label,cls}); }};
+  store.rechnungen.forEach(r=>{ if(r.faellig&&!['Bezahlt','Storniert'].includes(r.status)){ const dd=daysTo(r.faellig); add(r.faellig,(r.nr||r.partner||'Rechnung'),dd<0?'red':'amber',r.partner); }});
+  store.termine.forEach(t=>add(t.datum,t.titel||'Termin','pink',(t.teilnehmer||'')+' '+(t.typ||'')));
   store.aufgaben.forEach(a=>{
     if(!a.faellig||a.done) return;
     const start=parseD(a.faellig); if(!start) return;
+    const pers=a.zugewiesen_id?(store.personal.find(p=>p.id===a.zugewiesen_id)||{}).name:''; const cls=prioCls[a.prio]||'gray';
+    if(q && !((a.text||'')+' '+(pers||'')).toLowerCase().includes(q)) return;
     const rep=a.wiederholung;
     for(let d=1; d<=days; d++){
-      const cur=new Date(calY,calM,d);
-      if(cur<start) continue;
+      const cur=new Date(calY,calM,d); if(cur<start) continue;
       let hit=false;
       if(!rep||rep==='Keine') hit=cur.getTime()===start.getTime();
       else if(rep==='Täglich') hit=true;
       else if(rep==='Wöchentlich') hit=cur.getDay()===start.getDay();
       else if(rep==='Monatlich') hit=cur.getDate()===start.getDate();
       else if(rep==='Jährlich') hit=cur.getDate()===start.getDate()&&cur.getMonth()===start.getMonth();
-      if(hit){ (evMap[d]=evMap[d]||[]).push({label:a.text||'Aufgabe', cls:'pink'}); }
+      if(hit){ (evMap[d]=evMap[d]||[]).push({label:a.text||'Aufgabe', cls}); }
     }
   });
   for(let i=0;i<offset;i++) h+='<div class="day empty"></div>';
-  for(let d=1;d<=days;d++){ const evs=(evMap[d]||[]).map(e=>`<span class="ev ${e.cls}">${esc(e.label)}</span>`).join(''); const t=(calY===today.getFullYear()&&calM===today.getMonth()&&d===today.getDate())?'today':''; h+=`<div class="day ${t}"><span class="n">${d}</span>${evs}</div>`; }
+  for(let d=1;d<=days;d++){ const evs=(evMap[d]||[]).map(e=>`<span class="ev ${e.cls}" title="${esc(e.label)}"><span class="evd" style="background:currentColor"></span><span class="evt">${esc(e.label)}</span></span>`).join(''); const t=(calY===today.getFullYear()&&calM===today.getMonth()&&d===today.getDate())?'today':''; h+=`<div class="day ${t}"><span class="n">${d}</span>${evs}</div>`; }
   document.getElementById('calGrid').innerHTML=h;
+  renderCalHits(q);
+}
+function renderCalHits(q){
+  const el=document.getElementById('calHits'); if(!el) return;
+  if(!q){ el.innerHTML=''; return; }
+  const hits=[];
+  store.rechnungen.forEach(r=>{ if(r.faellig){ const s=((r.nr||'')+' '+(r.partner||'')).toLowerCase(); if(s.includes(q)) hits.push({date:r.faellig,label:(r.nr||'')+' · '+(r.partner||''),typ:'Rechnung'}); }});
+  store.termine.forEach(t=>{ const s=((t.titel||'')+' '+(t.teilnehmer||'')+' '+(t.typ||'')).toLowerCase(); if(s.includes(q)) hits.push({date:t.datum,label:(t.titel||'Termin')+(t.teilnehmer?' ('+t.teilnehmer+')':''),typ:t.typ||'Termin'}); });
+  store.aufgaben.forEach(a=>{ if(!a.faellig) return; const pers=a.zugewiesen_id?(store.personal.find(p=>p.id===a.zugewiesen_id)||{}).name:''; const s=((a.text||'')+' '+(pers||'')).toLowerCase(); if(s.includes(q)) hits.push({date:a.faellig,label:a.text||'Aufgabe',typ:'Aufgabe'}); });
+  hits.sort((a,b)=>(parseD(a.date)||0)-(parseD(b.date)||0));
+  el.innerHTML = hits.length
+    ? '<div class="card" style="margin-bottom:14px;padding:10px 14px"><div class="hint" style="margin:0 0 6px">'+hits.length+' Treffer (klicken zum Springen):</div>'+hits.map(x=>`<div class="row" style="cursor:pointer" data-caljump="${x.date}"><span class="date">${fmtD(x.date)}</span><span class="grow">${esc(x.label)}</span><span class="pill gray" style="font-size:11px">${esc(x.typ)}</span></div>`).join('')+'</div>'
+    : '<div class="card" style="margin-bottom:14px;padding:10px 14px"><div class="hint" style="margin:0">Keine Treffer.</div></div>';
 }
 function renderKundenList(){ document.getElementById('kundenList').innerHTML=store.kunden.map(k=>`<option value="${esc(k.name)}">`).join(''); }
 
@@ -832,7 +888,7 @@ function renderAll(){
   persist(); renderDash();
   renderFin(document.querySelector('#finTabs button.active').dataset.tab);
   renderCRM(); renderLief(); renderPers(); renderCal();
-  renderTodoList('todoFull', store.aufgaben); renderKundenList(); renderFirmenZugaenge();
+  fillTodoAssignee(); renderTodoView(); renderKundenList(); renderFirmenZugaenge();
 }
 
 /* ---------- Standard-Formular ---------- */
@@ -1085,6 +1141,9 @@ document.addEventListener('click',e=>{
 });
 document.getElementById('calPrev').onclick=()=>{ calM--; if(calM<0){calM=11;calY--;} renderCal(); };
 document.getElementById('calNext').onclick=()=>{ calM++; if(calM>11){calM=0;calY++;} renderCal(); };
+document.getElementById('calSearch').oninput=renderCal;
+['todoSearch','todoPrio','todoAssignee','todoZeit'].forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener(id==='todoSearch'?'input':'change', renderTodoView); });
+document.getElementById('calHits').addEventListener('click',e=>{ const j=e.target.closest('[data-caljump]'); if(j){ const d=parseD(j.dataset.caljump); if(d){ calY=d.getFullYear(); calM=d.getMonth(); renderCal(); } } });
 
 /* ---------- Export / Import ---------- */
 function exportData(){ const b=new Blob([JSON.stringify(store,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='internes-system-daten.json'; a.click(); }
