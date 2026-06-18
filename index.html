@@ -1273,26 +1273,23 @@ function mapAi(d){
     partner:d.empfaenger||d.aussteller||undefined, leistung:d.leistung||undefined };
 }
 async function analyzeInvoiceFile(file, setMsg){
+  if(!sb) throw new Error('Keine Verbindung zur Datenbank.');
   const isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
   let text='', imageBase64=null, mimeType=file.type||'application/octet-stream';
   if(isPdf){
-    if(!window.pdfjsLib) throw new Error('pdfjs');
+    if(!window.pdfjsLib) throw new Error('PDF-Modul nicht geladen (Internet nötig).');
     const buf=await file.arrayBuffer();
     const pdf=await pdfjsLib.getDocument({data:buf}).promise;
     text=await extractPdfText(pdf);
     if(text.replace(/\s/g,'').length<25){ const url=await pdfPageToDataUrl(await pdf.getPage(1)); imageBase64=url.split(',')[1]; mimeType='image/png'; }
   } else { const url=await fileToDataUrl(file); imageBase64=url.split(',')[1]; mimeType=file.type||'image/png'; }
-  // 1) KI-Auslesung (Gemini via Supabase Edge Function)
-  if(sb){
-    try{
-      if(setMsg) setMsg('KI liest Rechnung…');
-      const {data,error}=await sb.functions.invoke('extract-invoice',{ body:{ text: imageBase64?undefined:text, imageBase64, mimeType } });
-      if(!error && data && !data.error && (data.nr||data.brutto!=null||data.netto!=null||data.aussteller)) return mapAi(data);
-    }catch(e){}
-  }
-  // 2) Fallback: lokale Regeln
-  if(!text && imageBase64){ if(setMsg) setMsg('Texterkennung…'); try{ text=await ocr('data:'+mimeType+';base64,'+imageBase64, setMsg); }catch(e){} }
-  return parseInvoiceText(text||'');
+  // KI-Auslesung (Gemini via Supabase Edge Function) – nur KI, keine Regeln mehr
+  if(setMsg) setMsg('KI liest Rechnung…');
+  const {data,error}=await sb.functions.invoke('extract-invoice',{ body:{ text: imageBase64?undefined:text, imageBase64, mimeType } });
+  if(error){ let d=''; try{ d=' ('+(await error.context.text())+')'; }catch(_){} throw new Error('KI-Aufruf fehlgeschlagen'+d); }
+  if(!data) throw new Error('Keine Antwort von der KI.');
+  if(data.error) throw new Error('KI-Fehler: '+(typeof data.error==='string'?data.error:JSON.stringify(data.error))+(data.detail?' – '+JSON.stringify(data.detail):''));
+  return mapAi(data);
 }
 async function extractPdfText(pdf){
   let text='';
