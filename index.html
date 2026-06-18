@@ -215,6 +215,9 @@
     <div class="content">
 
       <section class="view active" id="view-dashboard">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+          <button class="btn" id="internBtn"><i class="ti ti-lock"></i> Unternehmensinterne Daten</button>
+        </div>
         <div class="grid2">
           <div class="card" style="border-top:3px solid var(--green)">
             <div class="head"><h3><i class="ti ti-arrow-down-left" style="color:var(--green);vertical-align:-2px;margin-right:6px"></i>Wir bekommen noch · Forderungen</h3><span class="link" data-goto="finanzen">Alle <i class="ti ti-arrow-right"></i></span></div>
@@ -312,10 +315,18 @@
             <button class="btn ghost" style="color:var(--text)" id="logoutBtn"><i class="ti ti-logout"></i> Abmelden</button>
           </div>
         </div>
-        <div class="card" style="margin-top:18px">
+      </section>
+
+      <section class="view" id="view-intern">
+        <div class="card">
           <div class="head"><h3><i class="ti ti-key" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>Firmen-Zugänge & Passwörter</h3><button class="btn" id="firmaZugAdd"><i class="ti ti-plus"></i> Zugang</button></div>
-          <p class="hint" style="margin-top:0">Eure eigenen Logins (Anbieter, Tools, Konten) – getrennt von den Kunden. Passwörter sind verdeckt, Auge zum Einblenden.</p>
+          <p class="hint" style="margin-top:0">Eure eigenen Logins (Anbieter, Tools, Konten). Passwörter sind verdeckt – Auge zum Einblenden.</p>
           <div id="firmaZugList"></div>
+        </div>
+        <div class="card">
+          <div class="head"><h3><i class="ti ti-notes" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>Interne Notizen</h3><button class="btn" id="internNotesSave">Speichern</button></div>
+          <p class="hint" style="margin-top:0">Freier Platz für alles Interne (Verträge, Fristen, Infos …).</p>
+          <textarea id="internNotes" style="width:100%;min-height:180px;padding:11px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit" placeholder="Hier könnt ihr alles eintragen, was ihr intern festhalten wollt…"></textarea>
         </div>
       </section>
 
@@ -1024,7 +1035,7 @@ document.getElementById('sendModal').addEventListener('click',e=>{ if(e.target.i
 document.getElementById('sendConfirm').onclick=()=>{ document.getElementById('sendModal').classList.remove('open'); sendInvoice(sendId); };
 
 /* ---------- Navigation ---------- */
-const titles={dashboard:'Dashboard',finanzen:'Finanzen',crm:'CRM / Kunden',lieferanten:'Anbieter',personal:'Personal',kalender:'Kalender',todo:'To-Do',einstellungen:'Einstellungen'};
+const titles={dashboard:'Dashboard',finanzen:'Finanzen',crm:'CRM / Kunden',lieferanten:'Anbieter',personal:'Personal',kalender:'Kalender',todo:'To-Do',einstellungen:'Einstellungen',intern:'Unternehmensinterne Daten'};
 let currentView='dashboard';
 function go(view){
   currentView=view;
@@ -1035,7 +1046,8 @@ function go(view){
   document.getElementById('templateBtn').style.display = view==='finanzen' ? '' : 'none';
   const pa=document.getElementById('primaryAction');
   const map={crm:'Neuer Kunde',lieferanten:'Neuer Anbieter',personal:'Neue Person',todo:'Neue Aufgabe',kalender:'Neuer Termin'};
-  if(view==='dashboard'||view==='einstellungen'){ pa.style.display='none'; return; }
+  if(view==='intern'){ const t=document.getElementById('internNotes'); if(t) t.value=(store.settings&&store.settings.interneNotizen)||''; }
+  if(view==='dashboard'||view==='einstellungen'||view==='intern'){ pa.style.display='none'; return; }
   const finTab=view==='finanzen'?document.querySelector('#finTabs button.active').dataset.tab:null;
   if(view==='finanzen'){ document.getElementById('pdfBtn').style.display=finTab==='Belege'?'none':''; }
   if(finTab==='Belege'){ pa.style.display='none'; return; }
@@ -1173,6 +1185,8 @@ document.getElementById('zugSave').onclick=async ()=>{
   }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
 };
 document.getElementById('firmaZugAdd').onclick=()=>openZugang(null,null);
+document.getElementById('internBtn').onclick=()=>go('intern');
+document.getElementById('internNotesSave').onclick=async ()=>{ store.settings.interneNotizen=document.getElementById('internNotes').value; try{ await saveSettings(); document.getElementById('internNotesSave').textContent='Gespeichert ✓'; setTimeout(()=>document.getElementById('internNotesSave').textContent='Speichern',1500); }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); } };
 document.getElementById('firmaZugList').addEventListener('click',e=>{
   const rv=e.target.closest('[data-reveal]'); if(rv){ const z=store.zugaenge.find(x=>x.id===rv.dataset.reveal); const span=rv.parentElement.querySelector('.zpw'); if(span){ if(span.dataset.shown==='1'){ span.textContent='••••••'; span.dataset.shown='0'; } else { span.textContent=(z&&z.passwort)?z.passwort:'(leer)'; span.dataset.shown='1'; } } return; }
   const ze=e.target.closest('[data-zugedit]'); if(ze){ openZugang(null, ze.dataset.zugedit); return; }
