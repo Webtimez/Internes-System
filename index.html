@@ -332,6 +332,18 @@
   </div>
 </div>
 
+<!-- Zugang / Login zu einem Kunden -->
+<div class="modal-overlay" id="zugModal">
+  <div class="modal">
+    <h3 id="zugTitle">Zugang hinzufügen</h3>
+    <div id="zugBody"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" style="color:var(--text)" id="zugCancel">Abbrechen</button>
+      <button type="button" class="btn" id="zugSave">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- Kundenauswahl für neue Rechnung -->
 <div class="modal-overlay" id="pickModal">
   <div class="modal">
@@ -536,7 +548,7 @@ const SET_FIELDS=[
 ];
 
 const KEY='webtimez_is_v2';
-let store = {rechnungen:[],kunden:[],lieferanten:[],personal:[],aufgaben:[],termine:[],belege:[],settings:{}};
+let store = {rechnungen:[],kunden:[],lieferanten:[],personal:[],aufgaben:[],termine:[],belege:[],zugaenge:[],settings:{}};
 const persist = () => { try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} };
 
 /* ---------- Supabase-Anbindung ---------- */
@@ -562,6 +574,7 @@ async function saveSettings(){ if(sb) await sb.from('settings').upsert({id:1,dat
 async function loadAll(){
   for(const key of Object.keys(TABLE)){ const {data,error}=await sb.from(TABLE[key]).select(SELECT[key]||'*').order('created_at',{ascending:true}); if(!error&&data) store[key]=data.map(r=>fromDb(key,r)); }
   const {data:b}=await sb.from('belege').select('id,name,groesse,kunde_id,created_at').order('created_at',{ascending:false}); store.belege=b||[];
+  const {data:z}=await sb.from('zugaenge').select('*').order('created_at',{ascending:true}); store.zugaenge=z||[];
   const {data:s}=await sb.from('settings').select('data').eq('id',1).maybeSingle(); store.settings=(s&&s.data)||{};
   renderAll();
 }
@@ -1040,6 +1053,16 @@ function openCustomer(id){
   const docList=docs.length
     ? '<div class="doclist">'+docs.map(b=>`<div class="row"><span class="grow">${esc(b.name||'Datei')}</span><span style="color:var(--muted);font-size:12px;margin:0 10px">${fmtD(b.created_at)}</span><i class="ti ti-download iconbtn" data-libdl="${b.id}"></i><i class="ti ti-trash iconbtn" data-libdel="${b.id}"></i></div>`).join('')+'</div>'
     : '<div class="hint">Noch keine Dokumente. Lade Rechnungen/Belege zu diesem Kunden hoch.</div>';
+  const zug=store.zugaenge.filter(z=>z.kunde_id===k.id);
+  const zugList=zug.length
+    ? zug.map(z=>{ const an=store.lieferanten.find(a=>a.id===z.anbieter_id); const href=z.url?(/^https?:/i.test(z.url)?z.url:'https://'+z.url):''; return `<div class="row" style="flex-wrap:wrap;gap:6px">
+        <span class="grow"><b>${esc(an?an.name:(z.bezeichnung||'Zugang'))}</b>${an&&z.bezeichnung?' · '+esc(z.bezeichnung):''}${z.benutzer?`<br><span style="color:var(--muted);font-size:12px">${esc(z.benutzer)}</span>`:''}</span>
+        ${href?`<a href="${esc(href)}" target="_blank" class="link" title="Öffnen"><i class="ti ti-external-link"></i></a>`:''}
+        <span class="zpw" data-shown="0" style="font-family:monospace;font-size:12px;min-width:60px;text-align:right">••••••</span>
+        <i class="ti ti-eye iconbtn" data-reveal="${z.id}" title="Passwort anzeigen"></i>
+        <i class="ti ti-edit iconbtn" data-zugedit="${z.id}"></i>
+        <i class="ti ti-trash iconbtn" data-zugdel="${z.id}"></i></div>`; }).join('')
+    : '<div class="hint">Noch keine Zugänge. Trage ein, wo ihr euch für diesen Kunden anmeldet.</div>';
   document.getElementById('custBody').innerHTML=`
     ${row('Ansprechpartner',esc(k.kontakt||''))}
     ${row('E-Mail',k.email?`<a href="mailto:${esc(k.email)}" style="color:#1155CC">${esc(k.email)}</a>`:'')}
@@ -1051,7 +1074,10 @@ function openCustomer(id){
     ${row('Notiz',esc(k.notiz||'').replace(/\n/g,'<br>'))}
     <h3 style="font-size:14px;margin:20px 0 0">Rechnungen</h3>${invHtml}
     <div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 6px"><h3 style="font-size:14px;margin:0">Dokumente / Belege</h3><button class="btn ghost" style="color:var(--text)" id="custDocUpload"><i class="ti ti-upload"></i> Hochladen</button></div>
-    ${docList}`;
+    ${docList}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 6px"><h3 style="font-size:14px;margin:0">Zugänge / Logins</h3><button class="btn ghost" style="color:var(--text)" id="custZugAdd"><i class="ti ti-plus"></i> Zugang</button></div>
+    ${zugList}
+    <p class="hint" style="margin-top:8px">Passwörter sind ausgeblendet – Auge zum Einblenden. Gespeichert in eurer Datenbank (Login-geschützt).</p>`;
   document.getElementById('custModal').classList.add('open');
 }
 document.getElementById('custClose').onclick=()=>document.getElementById('custModal').classList.remove('open');
@@ -1063,8 +1089,40 @@ document.getElementById('custBody').addEventListener('click',e=>{
   const v=e.target.closest('[data-inv]'); if(v){ document.getElementById('custModal').classList.remove('open'); openInvoice(v.dataset.inv); return; }
   const dl=e.target.closest('[data-libdl]'); if(dl){ downloadLibBeleg(dl.dataset.libdl); return; }
   const del=e.target.closest('[data-libdel]'); if(del){ if(confirm('Dokument löschen?')) deleteBelegLib(del.dataset.libdel).then(()=>openCustomer(currentCust)).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); return; }
-  if(e.target.closest('#custDocUpload')) document.getElementById('custDocFile').click();
+  if(e.target.closest('#custDocUpload')){ document.getElementById('custDocFile').click(); return; }
+  if(e.target.closest('#custZugAdd')){ openZugang(currentCust,null); return; }
+  const ze=e.target.closest('[data-zugedit]'); if(ze){ openZugang(currentCust, ze.dataset.zugedit); return; }
+  const zd=e.target.closest('[data-zugdel]'); if(zd){ if(confirm('Zugang löschen?')) deleteZugang(zd.dataset.zugdel).then(()=>openCustomer(currentCust)).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); return; }
+  const rv=e.target.closest('[data-reveal]'); if(rv){ const z=store.zugaenge.find(x=>x.id===rv.dataset.reveal); const span=rv.parentElement.querySelector('.zpw'); if(span){ if(span.dataset.shown==='1'){ span.textContent='••••••'; span.dataset.shown='0'; } else { span.textContent=(z&&z.passwort)?z.passwort:'(leer)'; span.dataset.shown='1'; } } return; }
 });
+let zugKunde=null, zugEditId=null;
+function openZugang(kundeId, id){
+  zugKunde=kundeId; zugEditId=id||null;
+  const z=id?store.zugaenge.find(x=>x.id===id):{};
+  document.getElementById('zugTitle').textContent=id?'Zugang bearbeiten':'Zugang hinzufügen';
+  document.getElementById('zugBody').innerHTML=`
+    <div class="field"><label>Anbieter (aus eurer Anbieter-Liste)</label>
+      <select id="z-anbieter"><option value="">— keiner —</option>${store.lieferanten.map(a=>`<option value="${a.id}" ${z.anbieter_id===a.id?'selected':''}>${esc(a.name||'')}</option>`).join('')}</select></div>
+    <div class="field"><label>Bezeichnung / Wofür</label><input id="z-bez" value="${esc(z.bezeichnung||'')}" placeholder="z. B. Hosting-Login, Domain, CMS"></div>
+    <div class="field"><label>Web-/Login-Adresse</label><input id="z-url" value="${esc(z.url||'')}" placeholder="z. B. app.anbieter.com"></div>
+    <div class="field half"><label>Benutzer / E-Mail</label><input id="z-user" value="${esc(z.benutzer||'')}" placeholder="login@…"></div>
+    <div class="field half"><label>Passwort</label><div style="display:flex;gap:6px"><input id="z-pw" type="password" value="${esc(z.passwort||'')}" style="flex:1"><button type="button" class="btn ghost" style="color:var(--text)" id="z-pw-toggle" aria-label="anzeigen"><i class="ti ti-eye"></i></button></div></div>
+    <div class="field"><label>Notiz</label><textarea id="z-notiz" placeholder="optional">${esc(z.notiz||'')}</textarea></div>`;
+  const ab=document.getElementById('z-anbieter');
+  ab.onchange=()=>{ const a=store.lieferanten.find(x=>x.id===ab.value); const u=document.getElementById('z-url'); if(a&&a.url&&!u.value) u.value=a.url; };
+  document.getElementById('z-pw-toggle').onclick=()=>{ const i=document.getElementById('z-pw'); i.type=i.type==='password'?'text':'password'; };
+  document.getElementById('zugModal').classList.add('open');
+}
+document.getElementById('zugCancel').onclick=()=>document.getElementById('zugModal').classList.remove('open');
+document.getElementById('zugSave').onclick=async ()=>{
+  const obj={ kunde_id:zugKunde, anbieter_id:document.getElementById('z-anbieter').value||null, bezeichnung:document.getElementById('z-bez').value.trim(), url:document.getElementById('z-url').value.trim(), benutzer:document.getElementById('z-user').value.trim(), passwort:document.getElementById('z-pw').value, notiz:document.getElementById('z-notiz').value.trim() };
+  try{
+    if(zugEditId){ const {data,error}=await sb.from('zugaenge').update(obj).eq('id',zugEditId).select().single(); if(error) throw error; const i=store.zugaenge.findIndex(x=>x.id===zugEditId); store.zugaenge[i]=data; }
+    else { const {data,error}=await sb.from('zugaenge').insert(obj).select().single(); if(error) throw error; store.zugaenge.push(data); }
+    document.getElementById('zugModal').classList.remove('open'); openCustomer(zugKunde);
+  }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
+};
+async function deleteZugang(id){ const {error}=await sb.from('zugaenge').delete().eq('id',id); if(error) throw error; store.zugaenge=store.zugaenge.filter(z=>z.id!==id); }
 document.getElementById('custDocFile').onchange=async e=>{
   const files=[...e.target.files]; if(!files.length||!currentCust) return;
   const btn=document.getElementById('custDocUpload'); if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> Lädt…'; }
