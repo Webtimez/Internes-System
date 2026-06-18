@@ -407,6 +407,18 @@
   </div>
 </div>
 
+<!-- Termin mit Teilnehmern -->
+<div class="modal-overlay" id="terminModal">
+  <div class="modal">
+    <h3 id="terminTitle">Neuer Termin</h3>
+    <div id="terminBody"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" style="color:var(--text)" id="terminCancel">Abbrechen</button>
+      <button type="button" class="btn" id="terminSave">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- Zugang / Login zu einem Kunden -->
 <div class="modal-overlay" id="zugModal" style="z-index:70">
   <div class="modal">
@@ -1196,7 +1208,7 @@ function primaryClick(){
   else if(currentView==='lieferanten') openForm('lieferanten');
   else if(currentView==='personal') openForm('personal');
   else if(currentView==='todo') openForm('aufgaben');
-  else if(currentView==='kalender') openForm('termine');
+  else if(currentView==='kalender') openTermin();
   else if(currentView==='finanzen' && document.querySelector('#finTabs button.active').dataset.tab==='Verbindlichkeit') openForm('verbindlichkeiten');
   else openGen();
 }
@@ -1340,6 +1352,36 @@ document.getElementById('firmaZugList').addEventListener('click',e=>{
   const zd=e.target.closest('[data-zugdel]'); if(zd){ if(confirm('Zugang löschen?')) deleteZugang(zd.dataset.zugdel).then(()=>renderFirmenZugaenge()).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); return; }
 });
 async function deleteZugang(id){ const {error}=await sb.from('zugaenge').delete().eq('id',id); if(error) throw error; store.zugaenge=store.zugaenge.filter(z=>z.id!==id); }
+
+/* ---------- Termin mit Teilnehmern ---------- */
+function openTermin(){
+  const checks=store.profiles.length
+    ? store.profiles.map(p=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 0;cursor:pointer"><input type="checkbox" class="t-part" value="${p.id}"> ${esc(p.name||p.email||'?')}${p.id===MY_ID?' (ich)':''}</label>`).join('')
+    : '<div class="hint">Noch keine Nutzer/Konten vorhanden.</div>';
+  document.getElementById('terminBody').innerHTML=`
+    <div class="field"><label>Titel</label><input id="t-titel" placeholder="z. B. Team-Meeting"></div>
+    <div class="field half"><label>Datum</label><input id="t-datum" type="date" value="${todayStr}"></div>
+    <div class="field half"><label>Typ</label><select id="t-typ"><option>Termin</option><option>Frist</option><option>Erinnerung</option></select></div>
+    <div class="field"><label>Teilnehmer (bekommen eine Erinnerung im Postfach)</label><div style="max-height:170px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px 10px">${checks}</div></div>`;
+  document.getElementById('terminModal').classList.add('open');
+}
+document.getElementById('terminCancel').onclick=()=>document.getElementById('terminModal').classList.remove('open');
+document.getElementById('terminSave').onclick=async ()=>{
+  const titel=document.getElementById('t-titel').value.trim();
+  const datum=document.getElementById('t-datum').value;
+  const typ=document.getElementById('t-typ').value;
+  if(!titel||!datum){ alert('Bitte Titel und Datum angeben.'); return; }
+  const partIds=[...document.querySelectorAll('.t-part:checked')].map(c=>c.value);
+  const partNames=partIds.map(id=>(store.profiles.find(p=>p.id===id)||{}).name).filter(Boolean);
+  try{
+    const {data:term,error}=await sb.from('termine').insert({titel,datum,typ,teilnehmer:partNames.join(', ')}).select().single();
+    if(error) throw error; store.termine.push(term);
+    if(partIds.length){ await sb.from('termin_teilnahme').insert(partIds.map(uid=>({termin_id:term.id,user_id:uid}))); }
+    const toNotify=partIds.filter(uid=>uid!==MY_ID);
+    if(toNotify.length){ const msg=`Termin-Einladung: „${titel}" am ${fmtD(datum)}${typ?(' ('+typ+')'):''}.`; await sb.from('nachrichten').insert(toNotify.map(uid=>({von:MY_ID,an:uid,text:msg}))); }
+    document.getElementById('terminModal').classList.remove('open'); renderCal();
+  }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
+};
 document.getElementById('custDocFile').onchange=async e=>{
   const files=[...e.target.files]; if(!files.length||!currentCust) return;
   const btn=document.getElementById('custDocUpload'); if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> Lädt…'; }
