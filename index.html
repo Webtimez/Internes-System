@@ -501,8 +501,10 @@ const SCHEMAS = {
   ]},
   aufgaben:{ singular:'Aufgabe', icon:'ti-checklist', fields:[
     {k:'text', l:'Aufgabe', t:'text', ph:'Was ist zu tun?'},
-    {k:'faellig', l:'Fällig am', t:'date', half:true},
+    {k:'faellig', l:'Fällig am (optional)', t:'date', half:true},
     {k:'prio', l:'Priorität', t:'select', o:['Hoch','Mittel','Niedrig'], half:true},
+    {k:'wiederholung', l:'Wiederholung', t:'select', o:['Keine','Täglich','Wöchentlich','Monatlich','Jährlich'], half:true},
+    {k:'zugewiesen_id', l:'Zugewiesen an', t:'select', dyn:'personal', half:true},
   ]},
   termine:{ singular:'Termin', icon:'ti-calendar', fields:[
     {k:'titel', l:'Titel', t:'text', ph:'z. B. Steuertermin'},
@@ -570,6 +572,7 @@ function toDb(key,o){ const d={...o}; delete d.id; delete d.created_at;
   if(key==='rechnungen'){ d.kunde_id=d.kundeId||null; delete d.kundeId; if('ustSatz' in d){ d.ust_satz=d.ustSatz; delete d.ustSatz; } }
   (NUMF[key]||[]).forEach(f=>{ if(f in d) d[f]=(d[f]===''||d[f]==null)?null:Number(d[f]); });
   (DATEF[key]||[]).forEach(f=>{ if(f in d && d[f]==='') d[f]=null; });
+  Object.keys(d).forEach(k=>{ if(k.endsWith('_id') && (d[k]===''||d[k]==null)) d[k]=null; });
   return d;
 }
 function fromDb(key,r){ const o={...r}; if(key==='rechnungen'){ o.kundeId=r.kunde_id; o.ustSatz=r.ust_satz; } return o; }
@@ -728,7 +731,12 @@ function renderDash(){
 function renderTodoList(el,list){
   if(!list.length){ document.getElementById(el).innerHTML=emptyState('Keine Aufgaben.','ti-checklist'); return; }
   const pc={Hoch:'red',Mittel:'amber',Niedrig:'gray'};
-  document.getElementById(el).innerHTML=list.map(a=>`<div class="row ${a.done?'done':''}"><i class="ti ${a.done?'ti-square-check':'ti-square'} check" data-todo="${a.id}"></i><span class="grow">${esc(a.text)}</span>${a.faellig?`<span class="pill ${pc[a.prio]||'gray'}">${fmtD(a.faellig)}</span>`:''}<i class="ti ti-trash iconbtn" data-del="aufgaben" data-id="${a.id}"></i></div>`).join('');
+  document.getElementById(el).innerHTML=list.map(a=>{
+    const pers=a.zugewiesen_id?store.personal.find(p=>p.id===a.zugewiesen_id):null;
+    const rep=a.wiederholung&&a.wiederholung!=='Keine'?a.wiederholung:'';
+    const meta=[pers?esc(pers.name):'', rep?('↻ '+rep):''].filter(Boolean).join(' · ');
+    return `<div class="row ${a.done?'done':''}"><i class="ti ${a.done?'ti-square-check':'ti-square'} check" data-todo="${a.id}"></i><span class="grow">${esc(a.text)}${meta?`<br><span style="color:var(--muted);font-size:11px">${meta}</span>`:''}</span>${a.faellig?`<span class="pill ${pc[a.prio]||'gray'}">${fmtD(a.faellig)}</span>`:`<span class="pill gray" style="font-size:11px">ohne Datum</span>`}<i class="ti ti-trash iconbtn" data-del="aufgaben" data-id="${a.id}"></i></div>`;
+  }).join('');
 }
 function custAddr(k){ return [k.strasse,[k.plz,k.ort].filter(Boolean).join(' ')].filter(Boolean).join('\n')||k.adresse||''; }
 function kundeOffen(k){ return store.rechnungen.filter(r=>r.typ==='Forderung'&&(r.kundeId===k.id||r.partner===k.name)&&!['Bezahlt','Storniert'].includes(r.status)).reduce((s,r)=>s+(Number(r.betrag)||0),0); }
@@ -772,7 +780,22 @@ function renderCal(){
   const add=(dstr,label,cls)=>{ const d=parseD(dstr); if(d&&d.getFullYear()===calY&&d.getMonth()===calM){ (evMap[d.getDate()]=evMap[d.getDate()]||[]).push({label,cls}); }};
   store.rechnungen.forEach(r=>{ if(r.faellig&&!['Bezahlt','Storniert'].includes(r.status)){ const dd=daysTo(r.faellig); add(r.faellig,(r.nr||r.partner||'Rechnung'),dd<0?'red':'amber'); }});
   store.termine.forEach(t=>add(t.datum,t.titel||'Termin','pink'));
-  store.aufgaben.forEach(a=>{ if(a.faellig&&!a.done) add(a.faellig,a.text||'Aufgabe','pink'); });
+  store.aufgaben.forEach(a=>{
+    if(!a.faellig||a.done) return;
+    const start=parseD(a.faellig); if(!start) return;
+    const rep=a.wiederholung;
+    for(let d=1; d<=days; d++){
+      const cur=new Date(calY,calM,d);
+      if(cur<start) continue;
+      let hit=false;
+      if(!rep||rep==='Keine') hit=cur.getTime()===start.getTime();
+      else if(rep==='Täglich') hit=true;
+      else if(rep==='Wöchentlich') hit=cur.getDay()===start.getDay();
+      else if(rep==='Monatlich') hit=cur.getDate()===start.getDate();
+      else if(rep==='Jährlich') hit=cur.getDate()===start.getDate()&&cur.getMonth()===start.getMonth();
+      if(hit){ (evMap[d]=evMap[d]||[]).push({label:a.text||'Aufgabe', cls:'pink'}); }
+    }
+  });
   for(let i=0;i<offset;i++) h+='<div class="day empty"></div>';
   for(let d=1;d<=days;d++){ const evs=(evMap[d]||[]).map(e=>`<span class="ev ${e.cls}">${esc(e.label)}</span>`).join(''); const t=(calY===today.getFullYear()&&calM===today.getMonth()&&d===today.getDate())?'today':''; h+=`<div class="day ${t}"><span class="n">${d}</span>${evs}</div>`; }
   document.getElementById('calGrid').innerHTML=h;
@@ -810,7 +833,12 @@ function openForm(schemaKey, id, preset){
   document.getElementById('modalForm').innerHTML=sc.fields.map(f=>{
     const v=rec[f.k]!=null?esc(rec[f.k]):'';
     let input;
-    if(f.t==='select') input=`<select name="${f.k}">${f.o.map(o=>`<option ${o===rec[f.k]?'selected':''}>${o}</option>`).join('')}</select>`;
+    if(f.t==='select'){
+      let optsHtml;
+      if(f.dyn==='personal') optsHtml='<option value="">— niemand —</option>'+store.personal.map(p=>`<option value="${p.id}" ${rec[f.k]===p.id?'selected':''}>${esc(p.name||'')}</option>`).join('');
+      else optsHtml=f.o.map(o=>`<option ${o===rec[f.k]?'selected':''}>${o}</option>`).join('');
+      input=`<select name="${f.k}">${optsHtml}</select>`;
+    }
     else if(f.t==='textarea') input=`<textarea name="${f.k}" placeholder="${f.ph||''}">${v}</textarea>`;
     else input=`<input type="${f.t}" name="${f.k}" value="${v}" placeholder="${f.ph||''}" ${f.list?`list="${f.list}"`:''}>`;
     return `<div class="field ${f.half?'half':''}"><label>${f.l}</label>${input}</div>`;
