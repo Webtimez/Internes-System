@@ -225,9 +225,11 @@
           <div class="tabs" id="finTabs" style="margin:0">
             <button class="active" data-tab="Forderung">Forderungen (Ausgang)</button>
             <button data-tab="Verbindlichkeit">Verbindlichkeiten (Eingang)</button>
+            <button data-tab="Belege">Belege-Ablage</button>
           </div>
           <button class="btn ghost" id="pdfBtn" style="color:var(--text)"><i class="ti ti-file-upload"></i> Rechnung hochladen (PDF/Bild)</button>
           <input type="file" id="pdfFile" accept="application/pdf,image/*" style="display:none">
+          <input type="file" id="belegFile" accept="application/pdf,image/*" multiple style="display:none">
         </div>
         <div class="card"><div id="finTable"></div></div>
       </section>
@@ -509,7 +511,7 @@ const SET_FIELDS=[
 ];
 
 const KEY='webtimez_is_v2';
-let store = {rechnungen:[],kunden:[],lieferanten:[],personal:[],aufgaben:[],termine:[],settings:{}};
+let store = {rechnungen:[],kunden:[],lieferanten:[],personal:[],aufgaben:[],termine:[],belege:[],settings:{}};
 const persist = () => { try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} };
 
 /* ---------- Supabase-Anbindung ---------- */
@@ -517,7 +519,7 @@ const SB_URL='https://lwqgylsyrarhgaxbrzvm.supabase.co';
 const SB_KEY='sb_publishable_ICakPCjSIwgKk3RBLQiixw_cSJgQnwc';
 const sb = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
 const TABLE={kunden:'kunden',rechnungen:'rechnungen',lieferanten:'anbieter',personal:'personal',aufgaben:'aufgaben',termine:'termine'};
-const SELECT={rechnungen:'id,typ,nr,partner,kunde_id,datum,faellig,leistung,netto,ust_satz,betrag,status,beschreibung,beleg_name,created_at'};
+const SELECT={rechnungen:'id,typ,nr,partner,kunde_id,datum,faellig,leistung,netto,ust_satz,betrag,status,beschreibung,beleg_name,beleg_id,created_at'};
 let pendingBeleg=null;
 const NUMF={kunden:['zahlungsziel'],rechnungen:['netto','ust_satz','betrag'],lieferanten:['kosten'],personal:['resturlaub']};
 const DATEF={rechnungen:['datum','faellig'],lieferanten:['naechste'],personal:['eintritt'],aufgaben:['faellig'],termine:['datum']};
@@ -534,13 +536,34 @@ async function dbDelete(key,id){ const {error}=await sb.from(TABLE[key]).delete(
 async function saveSettings(){ if(sb) await sb.from('settings').upsert({id:1,data:store.settings}); }
 async function loadAll(){
   for(const key of Object.keys(TABLE)){ const {data,error}=await sb.from(TABLE[key]).select(SELECT[key]||'*').order('created_at',{ascending:true}); if(!error&&data) store[key]=data.map(r=>fromDb(key,r)); }
+  const {data:b}=await sb.from('belege').select('id,name,groesse,created_at').order('created_at',{ascending:false}); store.belege=b||[];
   const {data:s}=await sb.from('settings').select('data').eq('id',1).maybeSingle(); store.settings=(s&&s.data)||{};
   renderAll();
 }
-async function downloadBeleg(id){
+function triggerDownload(dataUrl,name){ const a=document.createElement('a'); a.href=dataUrl; a.download=name||'beleg.pdf'; a.click(); }
+async function downloadInlineBeleg(id){
   const {data,error}=await sb.from('rechnungen').select('beleg,beleg_name').eq('id',id).single();
   if(error||!data||!data.beleg){ alert('Kein Beleg hinterlegt.'); return; }
-  const a=document.createElement('a'); a.href=data.beleg; a.download=data.beleg_name||'beleg.pdf'; a.click();
+  triggerDownload(data.beleg, data.beleg_name);
+}
+async function downloadLibBeleg(id){
+  const {data,error}=await sb.from('belege').select('data,name').eq('id',id).single();
+  if(error||!data||!data.data){ alert('Beleg nicht gefunden.'); return; }
+  triggerDownload(data.data, data.name);
+}
+async function uploadBelegFile(file){
+  const url=await fileToDataUrl(file);
+  const {data,error}=await sb.from('belege').insert({name:file.name,data:url,groesse:file.size}).select('id,name,groesse,created_at').single();
+  if(error) throw error; store.belege.unshift(data); return data;
+}
+async function deleteBelegLib(id){
+  const {error}=await sb.from('belege').delete().eq('id',id); if(error) throw error;
+  store.belege=store.belege.filter(b=>b.id!==id);
+}
+async function assignBeleg(rechnungId, belegId){
+  const row=await dbUpdate('rechnungen', rechnungId, {beleg_id: belegId||null});
+  const i=store.rechnungen.findIndex(r=>r.id===rechnungId); if(i>=0) store.rechnungen[i]=row;
+  renderAll();
 }
 
 function invPill(r){
@@ -554,7 +577,16 @@ function invPill(r){
 }
 function emptyState(txt, icon){ return `<div class="empty"><i class="ti ${icon||'ti-inbox'}"></i>${txt}</div>`; }
 
+function renderBelege(){
+  const el=document.getElementById('finTable');
+  const head=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div class="hint" style="margin:0">Lade hier alle Rechnungen/Belege hoch. Im Finanzamt-Bereich kannst du sie der jeweiligen Rechnung zuordnen.</div><button class="btn" id="belegUploadBtn"><i class="ti ti-upload"></i> Beleg hochladen</button></div>`;
+  if(!store.belege.length){ el.innerHTML=head+emptyState('Noch keine Belege hochgeladen.','ti-folder'); return; }
+  let h=head+'<table><thead><tr><th>Dateiname</th><th>Hochgeladen</th><th class="num">Größe</th><th class="act"></th></tr></thead><tbody>';
+  store.belege.forEach(b=>{ h+=`<tr><td>${esc(b.name||'–')}</td><td>${fmtD(b.created_at)}</td><td class="num">${b.groesse?Math.round(b.groesse/1024)+' KB':'–'}</td><td class="act"><i class="ti ti-download iconbtn" data-libdl="${b.id}" title="Herunterladen"></i><i class="ti ti-trash iconbtn" data-libdel="${b.id}" title="Löschen"></i></td></tr>`; });
+  el.innerHTML=h+'</tbody></table>';
+}
 function renderFin(typ){
+  if(typ==='Belege'){ renderBelege(); return; }
   const data = store.rechnungen.filter(r=>r.typ===typ);
   const el=document.getElementById('finTable');
   if(!data.length){ el.innerHTML=emptyState(typ==='Forderung'?'Noch keine Rechnungen. Oben rechts auf „+ Neue Rechnung".':'Noch keine Eingangsrechnungen. Oben rechts auf „+".','ti-receipt'); return; }
@@ -611,7 +643,12 @@ function renderUst(){
 function vorsteuerBelegList(verb){
   const list=verb.filter(r=>ustOf(r)>0).sort((a,b)=>(parseD(a.datum)||0)-(parseD(b.datum)||0));
   if(!list.length) return '<div class="hint">Noch keine Vorsteuer-Rechnungen erfasst.</div>';
-  return list.map(r=>`<div class="row"><span class="grow">${esc(r.nr||'–')} · ${esc(r.partner||'')} · ${fmtD(r.datum)}</span><span style="margin:0 12px;white-space:nowrap">USt ${fmt(ustOf(r))}</span>${r.beleg_name?`<span class="link" data-beleg="${r.id}"><i class="ti ti-download"></i> PDF</span>`:'<span class="pill amber">Beleg fehlt</span>'}</div>`).join('');
+  const opts=sel=>'<option value="">— Beleg aus Ablage wählen —</option>'+store.belege.map(b=>`<option value="${b.id}" ${sel===b.id?'selected':''}>${esc(b.name||'')}</option>`).join('');
+  return list.map(r=>{
+    const dl = r.beleg_id ? `<span class="link" data-libdl="${r.beleg_id}" style="white-space:nowrap"><i class="ti ti-download"></i> PDF</span>`
+            : (r.beleg_name ? `<span class="link" data-inlinedl="${r.id}" style="white-space:nowrap"><i class="ti ti-download"></i> PDF</span>` : '');
+    return `<div class="row" style="flex-wrap:wrap;gap:8px"><span class="grow">${esc(r.nr||'–')} · ${esc(r.partner||'')} · ${fmtD(r.datum)}</span><span style="white-space:nowrap">USt ${fmt(ustOf(r))}</span><select data-assign="${r.id}" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;max-width:180px">${opts(r.beleg_id)}</select>${dl}</div>`;
+  }).join('');
 }
 const dashFilter={Forderung:'offen', Verbindlichkeit:'offen'};
 function renderDash(){
@@ -914,9 +951,12 @@ function go(view){
   const pa=document.getElementById('primaryAction');
   const map={crm:'Neuer Kunde',lieferanten:'Neuer Anbieter',personal:'Neue Person',todo:'Neue Aufgabe',kalender:'Neuer Termin'};
   if(view==='dashboard'||view==='einstellungen'){ pa.style.display='none'; return; }
+  const finTab=view==='finanzen'?document.querySelector('#finTabs button.active').dataset.tab:null;
+  if(view==='finanzen'){ document.getElementById('pdfBtn').style.display=finTab==='Belege'?'none':''; }
+  if(finTab==='Belege'){ pa.style.display='none'; return; }
   pa.style.display='';
   let label=map[view]||'Neue Rechnung';
-  if(view==='finanzen' && document.querySelector('#finTabs button.active').dataset.tab==='Verbindlichkeit') label='Neue Eingangsrechnung';
+  if(finTab==='Verbindlichkeit') label='Neue Eingangsrechnung';
   pa.innerHTML='<i class="ti ti-plus"></i> '+label;
 }
 function primaryClick(){
@@ -938,7 +978,11 @@ document.addEventListener('click',e=>{
   const ed=e.target.closest('[data-edit]'); if(ed) openForm(ed.dataset.edit, ed.dataset.id);
   const dl=e.target.closest('[data-del]'); if(dl){ const en=dl.dataset.del,id=dl.dataset.id; if(confirm('Eintrag löschen?')){ dbDelete(en,id).then(()=>{ store[en]=store[en].filter(r=>r.id!==id); renderAll(); }).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); } }
   const td=e.target.closest('[data-todo]'); if(td){ const a=store.aufgaben.find(x=>x.id===td.dataset.todo); if(a){ a.done=!a.done; renderAll(); dbUpdate('aufgaben',a.id,{done:a.done}).catch(err=>alert('Speichern fehlgeschlagen: '+(err.message||err))); } }
-  const tab=e.target.closest('#finTabs button'); if(tab){ document.querySelectorAll('#finTabs button').forEach(b=>b.classList.remove('active')); tab.classList.add('active'); renderFin(tab.dataset.tab); primaryClick.view=currentView; document.getElementById('primaryAction').innerHTML='<i class="ti ti-plus"></i> '+(tab.dataset.tab==='Verbindlichkeit'?'Neue Eingangsrechnung':'Neue Rechnung'); }
+  const tab=e.target.closest('#finTabs button'); if(tab){ document.querySelectorAll('#finTabs button').forEach(b=>b.classList.remove('active')); tab.classList.add('active'); renderFin(tab.dataset.tab);
+    const isBeleg=tab.dataset.tab==='Belege';
+    document.getElementById('primaryAction').style.display=isBeleg?'none':'';
+    document.getElementById('pdfBtn').style.display=isBeleg?'none':'';
+    if(!isBeleg) document.getElementById('primaryAction').innerHTML='<i class="ti ti-plus"></i> '+(tab.dataset.tab==='Verbindlichkeit'?'Neue Eingangsrechnung':'Neue Rechnung'); }
 });
 document.getElementById('calPrev').onclick=()=>{ calM--; if(calM<0){calM=11;calY--;} renderCal(); };
 document.getElementById('calNext').onclick=()=>{ calM++; if(calM>11){calM=0;calY++;} renderCal(); };
@@ -1129,7 +1173,24 @@ function parseInvoiceText(t){
 }));
 document.getElementById('dashForderungen').addEventListener('click',e=>{ const c=e.target.closest('[data-cust]'); if(c) openCustomer(c.dataset.cust); });
 document.getElementById('dashVerbindlichkeiten').addEventListener('click',e=>{ const v=e.target.closest('[data-vb]'); if(v) openForm('verbindlichkeiten', v.dataset.vb); });
-document.getElementById('ustOverview').addEventListener('click',e=>{ const b=e.target.closest('[data-beleg]'); if(b) downloadBeleg(b.dataset.beleg); });
+document.getElementById('ustOverview').addEventListener('click',e=>{
+  const l=e.target.closest('[data-libdl]'); if(l){ downloadLibBeleg(l.dataset.libdl); return; }
+  const i=e.target.closest('[data-inlinedl]'); if(i){ downloadInlineBeleg(i.dataset.inlinedl); }
+});
+document.getElementById('ustOverview').addEventListener('change',e=>{ const s=e.target.closest('[data-assign]'); if(s) assignBeleg(s.dataset.assign, s.value); });
+// Beleg-Ablage (Finanzen → Belege)
+document.getElementById('finTable').addEventListener('click',e=>{
+  if(e.target.closest('#belegUploadBtn')) document.getElementById('belegFile').click();
+  const dl=e.target.closest('[data-libdl]'); if(dl) downloadLibBeleg(dl.dataset.libdl);
+  const del=e.target.closest('[data-libdel]'); if(del){ if(confirm('Beleg löschen?')) deleteBelegLib(del.dataset.libdel).then(()=>renderFin('Belege')).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); }
+});
+document.getElementById('belegFile').onchange=async e=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  const btn=document.getElementById('belegUploadBtn'); if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> Lädt…'; }
+  try{ for(const f of files) await uploadBelegFile(f); renderFin('Belege'); renderDash(); }
+  catch(err){ alert('Upload fehlgeschlagen: '+(err.message||err)); }
+  finally{ e.target.value=''; }
+};
 
 /* ---------- Login / Start ---------- */
 async function logout(){ if(sb) await sb.auth.signOut(); location.reload(); }
