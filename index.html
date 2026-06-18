@@ -470,22 +470,24 @@ const SCHEMAS = {
     {k:'partner', l:'Partner (Kunde / Anbieter)', t:'text', ph:'Name'},
     {k:'datum', l:'Rechnungsdatum', t:'date', half:true},
     {k:'faellig', l:'Fälligkeitsdatum', t:'date', half:true},
-    {k:'netto', l:'Netto (€)', t:'number', ph:'0.00', half:true},
-    {k:'ustSatz', l:'USt-Satz (%)', t:'select', o:['19','7','0'], half:true},
-    {k:'betrag', l:'Brutto (€)', t:'number', ph:'leer = wird berechnet', half:true},
+    {k:'netto', l:'Netto (€)', t:'number', ph:'optional', half:true},
+    {k:'ustBetrag', l:'USt-Betrag (€)', t:'number', ph:'gezahlte Steuer', half:true},
+    {k:'betrag', l:'Brutto (€)', t:'number', ph:'Gesamt', half:true},
+    {k:'ustSatz', l:'USt-Satz (%)', t:'number', ph:'optional, z. B. 19', half:true},
     {k:'status', l:'Status', t:'select', o:['Offen','Teilbezahlt','Bezahlt','Versendet'], half:true},
-    {k:'beschreibung', l:'Notiz', t:'textarea', ph:'optional'},
+    {k:'beschreibung', l:'Notiz', t:'textarea', ph:'Gib 2 Werte an (z. B. Brutto + USt-Betrag) – der Rest wird berechnet.'},
   ]},
   verbindlichkeiten:{ singular:'Verbindlichkeit', icon:'ti-receipt', entity:'rechnungen', fields:[
     {k:'nr', l:'Rechnungsnummer', t:'text', ph:'Nr. des Lieferanten'},
     {k:'partner', l:'Anbieter / Lieferant', t:'text', ph:'Name'},
     {k:'datum', l:'Rechnungsdatum', t:'date', half:true},
     {k:'faellig', l:'Fälligkeitsdatum', t:'date', half:true},
-    {k:'netto', l:'Netto (€)', t:'number', ph:'0.00', half:true},
-    {k:'ustSatz', l:'USt-Satz (%)', t:'select', o:['19','7','0'], half:true},
-    {k:'betrag', l:'Brutto (€)', t:'number', ph:'leer = wird berechnet', half:true},
+    {k:'netto', l:'Netto (€)', t:'number', ph:'optional', half:true},
+    {k:'ustBetrag', l:'USt-Betrag (€)', t:'number', ph:'gezahlte Steuer', half:true},
+    {k:'betrag', l:'Brutto (€)', t:'number', ph:'Gesamt', half:true},
+    {k:'ustSatz', l:'USt-Satz (%)', t:'number', ph:'optional, z. B. 19', half:true},
     {k:'status', l:'Status', t:'select', o:['Offen','Teilbezahlt','Bezahlt'], half:true},
-    {k:'beschreibung', l:'Notiz', t:'textarea', ph:'optional'},
+    {k:'beschreibung', l:'Notiz', t:'textarea', ph:'Gib 2 Werte an (z. B. Brutto + USt-Betrag) – der Rest wird berechnet.'},
   ]},
 };
 
@@ -559,6 +561,21 @@ function renderFin(typ){
   el.innerHTML=h+'</tbody></table>';
 }
 function nv(v){ return (v===''||v==null||isNaN(Number(v)))?null:Number(v); }
+function deriveAmounts(o){
+  let N=nv(o.netto), U=nv(o.ustBetrag), B=nv(o.betrag), R=nv(o.ustSatz);
+  for(let k=0;k<4;k++){
+    if(N==null && B!=null && U!=null) N=B-U;
+    if(U==null && B!=null && N!=null) U=B-N;
+    if(B==null && N!=null && U!=null) B=N+U;
+    if(N!=null && R!=null && U==null) U=N*R/100;
+    if(N==null && B!=null && R!=null) N=B/(1+R/100);
+    if(B==null && N!=null && R!=null) B=N*(1+R/100);
+    if(N==null && U!=null && R) N=U*100/R;
+  }
+  if((R==null||R==='') && N && U!=null) R=Math.round(U/N*100);
+  const rnd=x=>x==null?null:Math.round(x*100)/100;
+  return {netto:rnd(N), betrag:rnd(B), ustSatz:(R==null||R==='')?null:R};
+}
 function ustOf(r){
   const n=nv(r.netto), b=nv(r.betrag), rt=nv(r.ustSatz);
   if(n!=null && b!=null) return Math.max(0, Math.round((b-n)*100)/100);
@@ -700,12 +717,9 @@ document.getElementById('modalSave').onclick=async ()=>{
   const sc=SCHEMAS[formSchema]; if(sc.preset) Object.assign(obj, sc.preset);
   if(formEntity==='rechnungen'){
     if(formSchema==='verbindlichkeiten') obj.typ='Verbindlichkeit';
-    const r=parseFloat(obj.ustSatz)||0;
-    let netto=(obj.netto===''||obj.netto==null)?null:parseFloat(obj.netto);
-    let brutto=(obj.betrag===''||obj.betrag==null)?null:parseFloat(obj.betrag);
-    if(brutto==null && netto!=null) brutto=Math.round(netto*(1+r/100)*100)/100;
-    if(netto==null && brutto!=null) netto=Math.round(brutto/(1+r/100)*100)/100;
-    obj.netto=netto; obj.betrag=brutto;
+    const d=deriveAmounts(obj);
+    obj.netto=d.netto; obj.betrag=d.betrag; obj.ustSatz=d.ustSatz;
+    delete obj.ustBetrag;
   }
   try{
     if(formId){ const row=await dbUpdate(formEntity,formId,obj); const i=store[formEntity].findIndex(r=>r.id===formId); store[formEntity][i]=row; }
