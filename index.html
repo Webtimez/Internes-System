@@ -1026,17 +1026,27 @@ async function downloadInlineBeleg(id){
   if(error||!data||!data.beleg){ alert('Kein Beleg hinterlegt.'); return; }
   triggerDownload(data.beleg, data.beleg_name);
 }
+function isDataUrl(v){ return typeof v==='string' && v.slice(0,5)==='data:'; }
 async function downloadLibBeleg(id){
   const {data,error}=await sb.from('belege').select('data,name').eq('id',id).single();
   if(error||!data||!data.data){ alert('Beleg nicht gefunden.'); return; }
-  triggerDownload(data.data, data.name);
+  if(isDataUrl(data.data)){ triggerDownload(data.data, data.name); return; }
+  const {data:sg,error:se}=await sb.storage.from('belege').createSignedUrl(data.data, 3600);
+  if(se||!sg||!sg.signedUrl){ alert('Datei konnte nicht geladen werden.'); return; }
+  const a=document.createElement('a'); a.href=sg.signedUrl; a.download=data.name||'datei'; a.target='_blank'; a.rel='noopener'; document.body.appendChild(a); a.click(); a.remove();
 }
 async function uploadBelegFile(file, kundeId, art){
-  const url=await fileToDataUrl(file);
-  const {data,error}=await sb.from('belege').insert({name:file.name,data:url,groesse:file.size,kunde_id:kundeId||null,art:art||'Beleg'}).select('id,name,groesse,kunde_id,art,created_at').single();
+  const safe=(file.name||'datei').replace(/[^\w.\-]+/g,'_');
+  const path=(kundeId||'allgemein')+'/'+Date.now()+'-'+Math.random().toString(36).slice(2,8)+'-'+safe;
+  const up=await sb.storage.from('belege').upload(path, file, {contentType:file.type||undefined, upsert:false});
+  let stored;
+  if(up.error){ stored=await fileToDataUrl(file); } // Fallback: bei Storage-Problem als base64 sichern
+  else stored=path;
+  const {data,error}=await sb.from('belege').insert({name:file.name,data:stored,groesse:file.size,kunde_id:kundeId||null,art:art||'Beleg'}).select('id,name,groesse,kunde_id,art,created_at').single();
   if(error) throw error; store.belege.unshift(data); return data;
 }
 async function deleteBelegLib(id){
+  try{ const {data:row}=await sb.from('belege').select('data').eq('id',id).single(); if(row&&row.data&&!isDataUrl(row.data)){ await sb.storage.from('belege').remove([row.data]); } }catch(e){}
   const {error}=await sb.from('belege').delete().eq('id',id); if(error) throw error;
   store.belege=store.belege.filter(b=>b.id!==id);
 }
