@@ -784,7 +784,7 @@ const SB_URL='https://lwqgylsyrarhgaxbrzvm.supabase.co';
 const SB_KEY='sb_publishable_ICakPCjSIwgKk3RBLQiixw_cSJgQnwc';
 const sb = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
 const TABLE={kunden:'kunden',rechnungen:'rechnungen',lieferanten:'anbieter',personal:'personal',aufgaben:'aufgaben',termine:'termine'};
-const SELECT={rechnungen:'id,typ,nr,partner,kunde_id,datum,faellig,leistung,netto,ust_satz,betrag,status,beschreibung,beleg_name,beleg_id,kategorie,created_at'};
+const SELECT={rechnungen:'id,typ,nr,partner,kunde_id,datum,faellig,leistung,netto,ust_satz,betrag,status,beschreibung,beleg_name,beleg_id,kategorie,letzte_mahnung,created_at'};
 let pendingBeleg=null, pendingKategorie=null, pendingLibArt=null;
 const NUMF={kunden:['zahlungsziel'],rechnungen:['netto','ust_satz','betrag'],lieferanten:['kosten'],personal:['resturlaub']};
 const DATEF={rechnungen:['datum','faellig'],lieferanten:['naechste'],personal:['eintritt'],aufgaben:['faellig'],termine:['datum']};
@@ -890,8 +890,10 @@ function renderFin(typ){
   data.forEach(r=>{
     const paid=r.status==='Bezahlt';
     const paidIcon=`<i class="ti ${paid?'ti-arrow-back-up':'ti-circle-check'} iconbtn" data-paid="${r.id}" title="${paid?'Wieder als offen markieren':'Als bezahlt markieren'}"${paid?'':' style="color:var(--green)"'}></i>`;
+    const ueberfaellig = (()=>{ const d=daysTo(r.faellig); return d!==null&&d<0&&!['Bezahlt','Storniert'].includes(r.status); })();
+    const remindIcon = (typ==='Forderung'&&ueberfaellig) ? `<i class="ti ti-bell-ringing iconbtn" data-remind="${r.id}" title="Zahlungserinnerung senden${r.letzte_mahnung?(' · zuletzt '+fmtD(r.letzte_mahnung)):''}" style="color:var(--red)"></i>` : '';
     const acts = typ==='Forderung'
-      ? `${paidIcon}<i class="ti ti-eye iconbtn" data-inv="${r.id}" title="Rechnung ansehen"></i><i class="ti ti-mail iconbtn" data-mail="${r.id}" title="An Kunde senden"></i><i class="ti ti-edit iconbtn" data-genedit="${r.id}"></i><i class="ti ti-trash iconbtn" data-del="rechnungen" data-id="${r.id}"></i>`
+      ? `${paidIcon}${remindIcon}<i class="ti ti-eye iconbtn" data-inv="${r.id}" title="Rechnung ansehen"></i><i class="ti ti-mail iconbtn" data-mail="${r.id}" title="An Kunde senden"></i><i class="ti ti-edit iconbtn" data-genedit="${r.id}"></i><i class="ti ti-trash iconbtn" data-del="rechnungen" data-id="${r.id}"></i>`
       : `${paidIcon}${r.beleg_name?`<i class="ti ti-paperclip iconbtn" data-inlinedl="${r.id}" title="Angehängte Rechnung/Beleg: ${esc(r.beleg_name)}"></i>`:''}<i class="ti ti-edit iconbtn" data-edit="verbindlichkeiten" data-id="${r.id}"></i><i class="ti ti-trash iconbtn" data-del="rechnungen" data-id="${r.id}"></i>`;
     h+=`<tr><td>${esc(r.nr)||'–'}</td><td>${esc(r.partner)||'–'}</td><td>${fmtD(r.datum)}</td><td>${fmtD(r.faellig)}</td><td class="num">${fmt(r.betrag)}</td><td>${invPill(r)}</td><td class="act">${acts}</td></tr>`;
   });
@@ -1441,16 +1443,54 @@ document.getElementById('invPdf').onclick=()=>{
   if(window.html2pdf){ html2pdf().set({margin:0,filename:'Rechnung-'+(r.nr||'')+'.pdf',image:{type:'jpeg',quality:.98},html2canvas:{scale:2},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(el).save(); }
   else { window.print(); }
 };
-function sendInvoice(id){
+async function invoicePdfBase64(r){
+  if(!window.html2pdf) return null;
+  const wrap=document.createElement('div'); wrap.style.position='fixed'; wrap.style.left='-99999px'; wrap.style.top='0';
+  wrap.innerHTML=buildInvoiceHTML(r); document.body.appendChild(wrap);
+  const el=wrap.querySelector('#invoiceDoc')||wrap;
+  try{
+    const uri=await html2pdf().set({margin:0,image:{type:'jpeg',quality:.98},html2canvas:{scale:2},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(el).outputPdf('datauristring');
+    return (uri||'').split(',')[1]||null;
+  } finally { document.body.removeChild(wrap); }
+}
+function mailtoFallback(email,subj,body){ window.location.href=`mailto:${email}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`; }
+async function sendInvoice(id){
   const r=store.rechnungen.find(x=>x.id===id); if(!r) return;
   const k=store.kunden.find(x=>x.id===r.kundeId)||{};
   if(!k.email){ alert('Für diesen Kunden ist keine E-Mail hinterlegt. Bitte im CRM ergänzen.'); return; }
   const s=store.settings||{};
-  const subj=encodeURIComponent('Rechnung '+(r.nr||'')+(s.firmenname?' – '+s.firmenname:''));
-  const body=encodeURIComponent(`Sehr geehrte Damen und Herren,\n\nanbei erhalten Sie unsere Rechnung ${r.nr||''} über ${fmt(r.betrag)}.\nWir bitten um Begleichung bis zum ${fmtD(r.faellig)}.\n\nMit freundlichen Grüßen\n${s.firmenname||''}`);
-  if(r.status==='Offen'||r.status==='Entwurf'){ r.status='Versendet'; dbUpdate('rechnungen',r.id,{status:r.status}).catch(()=>{}); }
-  renderAll();
-  window.location.href=`mailto:${k.email}?subject=${subj}&body=${body}`;
+  const subj='Rechnung '+(r.nr||'')+(s.firmenname?' – '+s.firmenname:'');
+  const bodyText=`Sehr geehrte Damen und Herren,\n\nanbei erhalten Sie unsere Rechnung ${r.nr||''} über ${fmt(r.betrag)}.\nWir bitten um Begleichung bis zum ${fmtD(r.faellig)}.\n\nMit freundlichen Grüßen\n${s.firmenname||''}`;
+  const html=bodyText.replace(/\n/g,'<br>');
+  try{
+    let attachments=[];
+    try{ const b64=await invoicePdfBase64(r); if(b64) attachments=[{filename:'Rechnung-'+(r.nr||'')+'.pdf',content:b64,contentType:'application/pdf'}]; }catch(_){}
+    const {data,error}=await sb.functions.invoke('send-email',{ body:{ to:k.email, subject:subj, text:bodyText, html, replyTo:s.email||undefined, attachments } });
+    if(error||(data&&data.error)) throw new Error((data&&data.error)||(error&&error.message)||'Unbekannter Fehler');
+    if(r.status==='Offen'||r.status==='Entwurf'){ r.status='Versendet'; await dbUpdate('rechnungen',r.id,{status:'Versendet'}).catch(()=>{}); }
+    renderAll();
+    alert('Rechnung wurde per E-Mail an '+k.email+' gesendet'+(attachments.length?' (mit PDF).':' .'));
+  }catch(e){
+    if(confirm('Automatischer Versand nicht möglich:\n'+(e.message||e)+'\n\n(Tipp: In Supabase muss das Secret SMTP_PASS gesetzt sein.)\n\nStattdessen jetzt im E-Mail-Programm öffnen?')) mailtoFallback(k.email,subj,bodyText);
+  }
+}
+async function sendReminder(id){
+  const r=store.rechnungen.find(x=>x.id===id); if(!r) return;
+  const k=store.kunden.find(x=>x.id===r.kundeId)||{};
+  if(!k.email){ alert('Für diesen Kunden ist keine E-Mail hinterlegt. Bitte im CRM ergänzen.'); return; }
+  if(!confirm(`Zahlungserinnerung für Rechnung ${r.nr||''} an ${k.name} (${k.email}) senden?`)) return;
+  const s=store.settings||{};
+  const d=daysTo(r.faellig); const seit=(d!==null&&d<0)?(' (seit '+(-d)+' Tagen überfällig)'):'';
+  const subj='Zahlungserinnerung – Rechnung '+(r.nr||'');
+  const bodyText=`Sehr geehrte Damen und Herren,\n\nunsere Rechnung ${r.nr||''} über ${fmt(r.betrag)} war am ${fmtD(r.faellig)} fällig und ist nach unseren Unterlagen noch offen${seit}.\nWir bitten um zeitnahe Begleichung. Sollte sich Ihre Zahlung überschnitten haben, betrachten Sie diese Erinnerung als gegenstandslos.\n\nMit freundlichen Grüßen\n${s.firmenname||''}`;
+  try{
+    const {data,error}=await sb.functions.invoke('send-email',{ body:{ to:k.email, subject:subj, text:bodyText, html:bodyText.replace(/\n/g,'<br>'), replyTo:s.email||undefined } });
+    if(error||(data&&data.error)) throw new Error((data&&data.error)||(error&&error.message)||'Unbekannter Fehler');
+    r.letzte_mahnung=new Date().toISOString().slice(0,10); await dbUpdate('rechnungen',r.id,{letzte_mahnung:r.letzte_mahnung}).catch(()=>{});
+    alert('Zahlungserinnerung an '+k.email+' gesendet.');
+  }catch(e){
+    if(confirm('Automatischer Versand nicht möglich:\n'+(e.message||e)+'\n\nStattdessen im E-Mail-Programm öffnen?')) mailtoFallback(k.email,subj,bodyText);
+  }
 }
 document.getElementById('invSend').onclick=()=>sendInvoice(invId);
 
@@ -1508,6 +1548,7 @@ document.addEventListener('click',e=>{
   const g=e.target.closest('[data-goto]'); if(g) go(g.dataset.goto);
   const inv=e.target.closest('[data-inv]'); if(inv) openInvoice(inv.dataset.inv);
   const ml=e.target.closest('[data-mail]'); if(ml) openSend(ml.dataset.mail);
+  const rm=e.target.closest('[data-remind]'); if(rm) sendReminder(rm.dataset.remind);
   const pd=e.target.closest('[data-paid]'); if(pd){ togglePaid(pd.dataset.paid); return; }
   const ge=e.target.closest('[data-genedit]'); if(ge) openGen(ge.dataset.genedit);
   const ed=e.target.closest('[data-edit]'); if(ed) openForm(ed.dataset.edit, ed.dataset.id);
