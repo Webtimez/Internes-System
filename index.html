@@ -280,13 +280,12 @@
           <div class="tabs" id="finTabs" style="margin:0">
             <button class="active" data-tab="Forderung">Forderungen (Ausgang)</button>
             <button data-tab="Verbindlichkeit">Verbindlichkeiten (Eingang)</button>
-            <button data-tab="BelegAbsetzbar">Absetzbare Belege</button>
-            <button data-tab="Belege">Belege-Ablage</button>
+            <button data-tab="AblageRechnung">Rechnungen-Ablage</button>
+            <button data-tab="AblageBeleg">Belege-Ablage</button>
           </div>
           <button class="btn ghost" id="pdfBtn" style="color:var(--text)"><i class="ti ti-file-upload"></i> Rechnung hochladen (PDF/Bild)</button>
           <input type="file" id="pdfFile" accept="application/pdf,image/*" style="display:none">
           <input type="file" id="belegFile" accept="application/pdf,image/*" multiple style="display:none">
-          <input type="file" id="belegAbsFile" accept="application/pdf,image/*" style="display:none">
           <input type="file" id="custDocFile" accept="application/pdf,image/*" multiple style="display:none">
           <input type="file" id="custRechnungFile" accept="application/pdf,image/*" style="display:none">
         </div>
@@ -685,7 +684,7 @@ const SB_KEY='sb_publishable_ICakPCjSIwgKk3RBLQiixw_cSJgQnwc';
 const sb = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
 const TABLE={kunden:'kunden',rechnungen:'rechnungen',lieferanten:'anbieter',personal:'personal',aufgaben:'aufgaben',termine:'termine'};
 const SELECT={rechnungen:'id,typ,nr,partner,kunde_id,datum,faellig,leistung,netto,ust_satz,betrag,status,beschreibung,beleg_name,beleg_id,kategorie,created_at'};
-let pendingBeleg=null, pendingKategorie=null;
+let pendingBeleg=null, pendingKategorie=null, pendingLibArt=null;
 const NUMF={kunden:['zahlungsziel'],rechnungen:['netto','ust_satz','betrag'],lieferanten:['kosten'],personal:['resturlaub']};
 const DATEF={rechnungen:['datum','faellig'],lieferanten:['naechste'],personal:['eintritt'],aufgaben:['faellig'],termine:['datum']};
 function toDb(key,o){ const d={...o}; delete d.id; delete d.created_at;
@@ -752,29 +751,20 @@ function invPill(r){
 function emptyState(txt, icon){ return `<div class="empty"><i class="ti ${icon||'ti-inbox'}"></i>${txt}</div>`; }
 
 function finQ(){ const e=document.getElementById('finSearch'); return (e&&e.value||'').toLowerCase(); }
-function renderBelege(){
+function renderBelege(art){
+  const isR=art==='Rechnung';
   const el=document.getElementById('finTable'); const q=finQ();
-  const head=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div class="hint" style="margin:0">Lade hier alle Rechnungen/Belege hoch. Im Finanzamt-Bereich kannst du sie der jeweiligen Rechnung zuordnen.</div><button class="btn" id="belegUploadBtn"><i class="ti ti-upload"></i> Beleg hochladen</button></div>`;
-  let list=store.belege; if(q) list=list.filter(b=>(b.name||'').toLowerCase().includes(q));
-  if(!list.length){ el.innerHTML=head+emptyState(q?'Kein Beleg gefunden.':'Noch keine Belege hochgeladen.','ti-folder'); return; }
-  let h=head+'<table><thead><tr><th>Dateiname</th><th>Hochgeladen</th><th class="num">Größe</th><th class="act"></th></tr></thead><tbody>';
-  list.forEach(b=>{ h+=`<tr><td>${esc(b.name||'–')}</td><td>${fmtD(b.created_at)}</td><td class="num">${b.groesse?Math.round(b.groesse/1024)+' KB':'–'}</td><td class="act"><i class="ti ti-download iconbtn" data-libdl="${b.id}" title="Herunterladen"></i><i class="ti ti-trash iconbtn" data-libdel="${b.id}" title="Löschen"></i></td></tr>`; });
-  el.innerHTML=h+'</tbody></table>';
-}
-function renderBelegeAbsetzbar(){
-  const el=document.getElementById('finTable'); const q=finQ();
-  const head=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px"><div class="hint" style="margin:0;flex:1;min-width:220px">Absetzbare Belege (z. B. Tankbeleg, Büromaterial). Die KI liest Betrag und USt aus – du kannst alles vor dem Speichern korrigieren. Die Vorsteuer fließt automatisch in den Steuer-Bereich ein.</div><button class="btn" id="belegAbsBtn"><i class="ti ti-file-upload"></i> Beleg hochladen (KI)</button></div>`;
-  let list=store.rechnungen.filter(r=>r.kategorie==='Beleg');
-  if(q) list=list.filter(r=>((r.partner||'')+' '+(r.leistung||'')+' '+(r.nr||'')).toLowerCase().includes(q));
-  list.sort((a,b)=>(parseD(b.datum)||0)-(parseD(a.datum)||0));
-  if(!list.length){ el.innerHTML=head+emptyState(q?'Kein Beleg gefunden.':'Noch keine absetzbaren Belege. Lade z. B. einen Tankbeleg hoch.','ti-receipt-2'); return; }
-  let h=head+'<table><thead><tr><th>Zweck / Anbieter</th><th>Datum</th><th class="num">Netto</th><th class="num">USt</th><th class="num">Brutto</th><th class="act"></th></tr></thead><tbody>';
-  list.forEach(r=>{ h+=`<tr><td>${esc(r.leistung||r.partner||'Beleg')}</td><td>${fmtD(r.datum)}</td><td class="num">${fmt(r.netto)}</td><td class="num">${fmt(ustOf(r))}</td><td class="num">${fmt(r.betrag)}</td><td class="act">${r.beleg_name?`<i class="ti ti-download iconbtn" data-inlinedl="${r.id}" title="Beleg herunterladen"></i>`:''}<i class="ti ti-edit iconbtn" data-edit="verbindlichkeiten" data-id="${r.id}" title="Bearbeiten"></i><i class="ti ti-trash iconbtn" data-del="rechnungen" data-id="${r.id}"></i></td></tr>`; });
+  const head=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px"><div class="hint" style="margin:0;flex:1;min-width:220px">${isR?'Lade hier Rechnungen als Datei (PDF/Bild) ab.':'Lade hier Belege als Datei ab, z. B. Tankbelege oder Quittungen.'}</div><button class="btn" id="belegUploadBtn"><i class="ti ti-upload"></i> ${isR?'Rechnung':'Beleg'} hochladen</button></div>`;
+  let list=store.belege.filter(b=> isR ? b.art==='Rechnung' : b.art!=='Rechnung');
+  if(q) list=list.filter(b=>(b.name||'').toLowerCase().includes(q));
+  if(!list.length){ el.innerHTML=head+emptyState(q?'Nichts gefunden.':(isR?'Noch keine Rechnungen hochgeladen.':'Noch keine Belege hochgeladen.'),'ti-folder'); return; }
+  let h=head+'<table><thead><tr><th>Dateiname</th><th>Kunde</th><th>Hochgeladen</th><th class="num">Größe</th><th class="act"></th></tr></thead><tbody>';
+  list.forEach(b=>{ const k=b.kunde_id?store.kunden.find(x=>x.id===b.kunde_id):null; h+=`<tr><td>${esc(b.name||'–')}</td><td>${k?esc(k.name||''):'<span style="color:var(--muted)">allgemein</span>'}</td><td>${fmtD(b.created_at)}</td><td class="num">${b.groesse?Math.round(b.groesse/1024)+' KB':'–'}</td><td class="act"><i class="ti ti-download iconbtn" data-libdl="${b.id}" title="Herunterladen"></i><i class="ti ti-trash iconbtn" data-libdel="${b.id}" title="Löschen"></i></td></tr>`; });
   el.innerHTML=h+'</tbody></table>';
 }
 function renderFin(typ){
-  if(typ==='Belege'){ renderBelege(); return; }
-  if(typ==='BelegAbsetzbar'){ renderBelegeAbsetzbar(); return; }
+  if(typ==='AblageRechnung'){ renderBelege('Rechnung'); return; }
+  if(typ==='AblageBeleg'){ renderBelege('Beleg'); return; }
   const q=finQ(); const st=(document.getElementById('finStatus')||{}).value||'';
   let data = store.rechnungen.filter(r=>r.typ===typ);
   if(q) data=data.filter(r=>((r.nr||'')+' '+(r.partner||'')).toLowerCase().includes(q));
@@ -1298,7 +1288,7 @@ function go(view){
   if(view==='nachrichten') renderNachrichten();
   if(view==='dashboard'||view==='einstellungen'||view==='intern'||view==='nachrichten'){ pa.style.display='none'; return; }
   const finTab=view==='finanzen'?document.querySelector('#finTabs button.active').dataset.tab:null;
-  const hideActions=finTab==='Belege'||finTab==='BelegAbsetzbar';
+  const hideActions=finTab==='AblageRechnung'||finTab==='AblageBeleg';
   if(view==='finanzen'){ document.getElementById('pdfBtn').style.display=hideActions?'none':''; }
   if(hideActions){ pa.style.display='none'; return; }
   pa.style.display='';
@@ -1328,7 +1318,7 @@ document.addEventListener('click',e=>{
   const dl=e.target.closest('[data-del]'); if(dl){ const en=dl.dataset.del,id=dl.dataset.id; if(confirm('Eintrag löschen?')){ dbDelete(en,id).then(()=>{ store[en]=store[en].filter(r=>r.id!==id); renderAll(); }).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); } }
   const td=e.target.closest('[data-todo]'); if(td){ const a=store.aufgaben.find(x=>x.id===td.dataset.todo); if(a){ a.done=!a.done; renderAll(); dbUpdate('aufgaben',a.id,{done:a.done}).catch(err=>alert('Speichern fehlgeschlagen: '+(err.message||err))); } }
   const tab=e.target.closest('#finTabs button'); if(tab){ document.querySelectorAll('#finTabs button').forEach(b=>b.classList.remove('active')); tab.classList.add('active'); renderFin(tab.dataset.tab);
-    const isBeleg=tab.dataset.tab==='Belege'||tab.dataset.tab==='BelegAbsetzbar';
+    const isBeleg=tab.dataset.tab==='AblageRechnung'||tab.dataset.tab==='AblageBeleg';
     document.getElementById('primaryAction').style.display=isBeleg?'none':'';
     document.getElementById('pdfBtn').style.display=isBeleg?'none':'';
     if(!isBeleg) document.getElementById('primaryAction').innerHTML='<i class="ti ti-plus"></i> '+(tab.dataset.tab==='Verbindlichkeit'?'Neue Eingangsrechnung':'Neue Rechnung'); }
@@ -1712,39 +1702,19 @@ document.getElementById('ustOverview').addEventListener('click',e=>{
   const i=e.target.closest('[data-inlinedl]'); if(i){ downloadInlineBeleg(i.dataset.inlinedl); }
 });
 document.getElementById('ustOverview').addEventListener('change',e=>{ const s=e.target.closest('[data-assign]'); if(s){ assignEditing.delete(s.dataset.assign); assignBeleg(s.dataset.assign, s.value); } });
-// Beleg-Ablage (Finanzen → Belege)
+// Ablagen (Finanzen → Rechnungen-Ablage / Belege-Ablage)
+function curAblageArt(){ return (document.querySelector('#finTabs button.active')||{}).dataset?.tab==='AblageRechnung'?'Rechnung':'Beleg'; }
 document.getElementById('finTable').addEventListener('click',e=>{
-  if(e.target.closest('#belegUploadBtn')) document.getElementById('belegFile').click();
-  if(e.target.closest('#belegAbsBtn')) document.getElementById('belegAbsFile').click();
+  if(e.target.closest('#belegUploadBtn')){ pendingLibArt=curAblageArt(); document.getElementById('belegFile').click(); return; }
   const idl=e.target.closest('[data-inlinedl]'); if(idl){ downloadInlineBeleg(idl.dataset.inlinedl); return; }
   const dl=e.target.closest('[data-libdl]'); if(dl) downloadLibBeleg(dl.dataset.libdl);
-  const del=e.target.closest('[data-libdel]'); if(del){ if(confirm('Beleg löschen?')) deleteBelegLib(del.dataset.libdel).then(()=>renderFin('Belege')).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); }
+  const del=e.target.closest('[data-libdel]'); if(del){ if(confirm('Datei löschen?')) deleteBelegLib(del.dataset.libdel).then(()=>finRefresh()).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); }
 });
-document.getElementById('belegAbsFile').onchange=async e=>{
-  const file=e.target.files[0]; if(!file) return;
-  const btn=document.getElementById('belegAbsBtn'); const orig=btn?btn.innerHTML:''; if(btn) btn.disabled=true;
-  const setMsg=m=>{ if(btn) btn.innerHTML='<i class="ti ti-loader-2"></i> '+m; };
-  setMsg('Analysiere…');
-  try{
-    pendingBeleg={data:await fileToDataUrl(file), name:file.name};
-    pendingKategorie='Beleg';
-    const preset=await analyzeInvoiceFile(file, setMsg);
-    preset.typ='Verbindlichkeit'; preset.status='Bezahlt';
-    preset.partner=preset.aussteller||preset.partner||'';
-    if(!preset.leistung && preset.partner) preset.leistung=preset.partner;
-    preset.beschreibung='Absetzbarer Beleg · '+file.name;
-    openForm('rechnungimport', null, preset);
-  }catch(err){
-    pendingKategorie='Beleg';
-    alert('Beleg konnte nicht automatisch gelesen werden – bitte die Werte im Formular eintragen.');
-    openForm('rechnungimport', null, {typ:'Verbindlichkeit', status:'Bezahlt'});
-  }
-  finally{ if(btn){ btn.innerHTML=orig; btn.disabled=false; } e.target.value=''; }
-};
 document.getElementById('belegFile').onchange=async e=>{
-  const files=[...e.target.files]; if(!files.length) return;
+  const files=[...e.target.files]; if(!files.length){ pendingLibArt=null; return; }
+  const art=pendingLibArt||'Beleg'; pendingLibArt=null;
   const btn=document.getElementById('belegUploadBtn'); if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> Lädt…'; }
-  try{ for(const f of files) await uploadBelegFile(f); renderFin('Belege'); renderDash(); }
+  try{ for(const f of files) await uploadBelegFile(f, null, art); finRefresh(); renderDash(); }
   catch(err){ alert('Upload fehlgeschlagen: '+(err.message||err)); }
   finally{ e.target.value=''; }
 };
