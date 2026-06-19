@@ -175,6 +175,8 @@
   .msgedit{margin-left:8px; font-size:14px;}
   .msgicon{color:var(--muted); cursor:pointer; font-size:18px; flex-shrink:0;}
   .msgicon:hover{color:var(--pink-dark);}
+  .kontocard:hover{outline:2px solid var(--pink-tint);}
+  #kontoBox tbody tr:hover{background:var(--surface);}
   .filechip{display:flex; align-items:center; gap:7px; background:rgba(0,0,0,.06); border-radius:8px; padding:8px 10px; margin:2px 0; font-size:13px; cursor:pointer; max-width:240px;}
   .bubble.me .filechip{background:rgba(255,255,255,.22); color:#fff;}
   @media(max-width:760px){
@@ -504,6 +506,17 @@
     <div class="modal-actions">
       <button type="button" class="btn ghost" style="color:var(--text)" id="terminCancel">Abbrechen</button>
       <button type="button" class="btn" id="terminSave">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Konto-Detail (Aufschlüsselung) -->
+<div class="modal-overlay" id="kontoDetailModal" style="z-index:72">
+  <div class="modal">
+    <h3 id="kontoDetailTitle">Aufschlüsselung</h3>
+    <div id="kontoDetailBody"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" style="color:var(--text)" id="kontoDetailClose">Schließen</button>
     </div>
   </div>
 </div>
@@ -958,22 +971,62 @@ function renderKonto(){
   const ustSaldo=sumU(verb)-sumU(ford); // <0 => Zahllast ans Finanzamt
   const zahllast=ustSaldo<0?-ustSaldo:0, erstattung=ustSaldo>0?ustSaldo:0;
   const money=(v,col)=>`<span style="color:${col||'var(--text)'}">${fmt(v)}</span>`;
-  const big=(label,val,col,sub)=>`<div style="flex:1;min-width:150px;background:var(--surface);border-radius:10px;padding:14px 16px"><div style="font-size:12px;color:var(--muted)">${label}</div><div style="font-size:23px;font-weight:700;color:${col||'var(--text)'};margin-top:3px">${fmt(val)}</div>${sub?`<div style="font-size:11px;color:var(--muted);margin-top:3px;line-height:1.3">${sub}</div>`:''}</div>`;
+  const big=(key,label,val,col,sub)=>`<div class="kontocard" data-konto="${key}" style="flex:1;min-width:150px;background:var(--surface);border-radius:10px;padding:14px 16px;cursor:pointer"><div style="font-size:12px;color:var(--muted)">${label} <i class="ti ti-chevron-right" style="font-size:13px;vertical-align:-1px"></i></div><div style="font-size:23px;font-weight:700;color:${col||'var(--text)'};margin-top:3px">${fmt(val)}</div>${sub?`<div style="font-size:11px;color:var(--muted);margin-top:3px;line-height:1.3">${sub}</div>`:''}</div>`;
+  const tr=(key,label,val,col)=>`<tr data-konto="${key}" style="cursor:pointer"><td>${label}</td><td class="num">${money(val,col)}</td><td style="width:20px;color:var(--hint)"><i class="ti ti-chevron-right"></i></td></tr>`;
   document.getElementById('kontoBox').innerHTML=`
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-      ${big('Aktueller Kontostand (Ist)', ist, ist>=0?'var(--green)':'var(--red)','Eingegangen minus ausgegeben')}
-      ${big('Voraussichtl. Kontostand', prognoseMit, prognoseMit>=0?'var(--green)':'var(--red)','inkl. offener Forderungen, abzüglich offener Verbindlichkeiten')}
-      ${big('Ohne offene Verbindlichkeiten', prognoseOhne, 'var(--text)','Ist + alle offenen Forderungen')}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+      ${big('ist','Aktueller Kontostand (Ist)', ist, ist>=0?'var(--green)':'var(--red)','Eingegangen minus ausgegeben')}
+      ${big('prognoseMit','Voraussichtl. Kontostand', prognoseMit, prognoseMit>=0?'var(--green)':'var(--red)','inkl. offener Forderungen, abzüglich offener Verbindlichkeiten')}
+      ${big('prognoseOhne','Ohne offene Verbindlichkeiten', prognoseOhne, 'var(--text)','Ist + alle offenen Forderungen')}
     </div>
+    <p class="hint" style="margin:2px 0 10px"><i class="ti ti-hand-finger" style="vertical-align:-2px"></i> Tippe auf einen Betrag, um zu sehen, woraus er sich zusammensetzt.</p>
     <table><tbody>
-      <tr><td><i class="ti ti-arrow-down-left" style="color:var(--green);vertical-align:-2px"></i> Bereits eingenommen (bezahlte Rechnungen)</td><td class="num">${money(eingenommen,'var(--green)')}</td></tr>
-      <tr><td><i class="ti ti-arrow-up-right" style="color:var(--amber);vertical-align:-2px"></i> Bereits ausgegeben (bezahlte Verbindlichkeiten)</td><td class="num">${money(ausgegeben)}</td></tr>
-      <tr><td>Noch offene Forderungen (kommt noch rein)</td><td class="num">${money(offenF)}</td></tr>
-      <tr><td>Noch offene Verbindlichkeiten (geht noch raus)</td><td class="num">${money(offenV,'var(--red)')}</td></tr>
-      <tr><td><b>Verdient (netto, ohne USt)</b></td><td class="num"><b>${fmt(verdientNetto)}</b></td></tr>
-      <tr><td>${zahllast?'Voraussichtlich ans Finanzamt (USt-Zahllast)':'Voraussichtliche USt-Erstattung'}</td><td class="num">${money(zahllast||erstattung, zahllast?'var(--red)':'var(--green)')}</td></tr>
+      ${tr('eingenommen','<i class="ti ti-arrow-down-left" style="color:var(--green);vertical-align:-2px"></i> Bereits eingenommen (bezahlte Rechnungen)', eingenommen, 'var(--green)')}
+      ${tr('ausgegeben','<i class="ti ti-arrow-up-right" style="color:var(--amber);vertical-align:-2px"></i> Bereits ausgegeben (bezahlte Verbindlichkeiten)', ausgegeben)}
+      ${tr('offenF','Noch offene Forderungen (kommt noch rein)', offenF)}
+      ${tr('offenV','Noch offene Verbindlichkeiten (geht noch raus)', offenV, 'var(--red)')}
+      ${tr('verdient','<b>Verdient (netto, ohne USt)</b>', verdientNetto)}
+      ${tr('ust', (zahllast?'USt ans Finanzamt (Zahllast)':'USt-Erstattung vom Finanzamt'), (zahllast||erstattung), zahllast?'var(--red)':'var(--green)')}
     </tbody></table>
-    <p class="hint" style="margin-top:10px">„Verdient (netto)" ist euer Umsatz ohne Umsatzsteuer aus bezahlten Forderungen – die USt ist ein durchlaufender Posten und geht (verrechnet mit der Vorsteuer) ans Finanzamt. Eine Rechnung zählt als „bezahlt", sobald ihr sie in der Liste auf bezahlt setzt. Orientierungswerte, keine Steuerberatung.</p>`;
+    <p class="hint" style="margin-top:10px">Die „USt-Zahllast" ist <b>nicht euer Verlust</b>: Es ist die Umsatzsteuer, die ihr euren Kunden berechnet habt und ans Finanzamt weiterleitet – abzüglich der Vorsteuer aus euren Eingangsrechnungen. Tippe darauf, um die einzelnen Rechnungen zu sehen. Orientierungswerte, keine Steuerberatung.</p>`;
+}
+function kontoDetail(key){
+  const act=store.rechnungen.filter(r=>r.status!=='Storniert');
+  const ford=act.filter(r=>r.typ==='Forderung'), verb=act.filter(r=>r.typ==='Verbindlichkeit');
+  const paidF=ford.filter(r=>r.status==='Bezahlt'), paidV=verb.filter(r=>r.status==='Bezahlt');
+  const openF=ford.filter(r=>r.status!=='Bezahlt'), openV=verb.filter(r=>r.status!=='Bezahlt');
+  const B=r=>Number(r.betrag)||0, N=r=>(Number(r.betrag)||0)-ustOf(r), U=r=>ustOf(r);
+  const items=(arr,valFn)=>arr.map(r=>({label:(r.nr||'ohne Nr.')+' · '+(r.partner||'–')+(r.datum?(' · '+fmtD(r.datum)):''), amount:valFn(r)}));
+  const secEin={label:'Eingenommen (bezahlte Forderungen)', sign:1, items:items(paidF,B)};
+  const secAus={label:'Ausgegeben (bezahlte Verbindlichkeiten)', sign:-1, items:items(paidV,B)};
+  const secOffF={label:'Offene Forderungen (kommt noch rein)', sign:1, items:items(openF,B)};
+  const secOffV={label:'Offene Verbindlichkeiten (geht noch raus)', sign:-1, items:items(openV,B)};
+  switch(key){
+    case 'eingenommen': return {title:'Bereits eingenommen', hint:'Alle Forderungen, die ihr auf „Bezahlt" gesetzt habt.', sections:[{...secEin, sign:1}]};
+    case 'ausgegeben': return {title:'Bereits ausgegeben', hint:'Alle Verbindlichkeiten, die auf „Bezahlt" stehen.', sections:[{label:secAus.label, sign:1, items:secAus.items}]};
+    case 'offenF': return {title:'Noch offene Forderungen', hint:'Rechnungen an Kunden, die noch nicht bezahlt sind – dieses Geld kommt voraussichtlich noch rein.', sections:[{label:secOffF.label, sign:1, items:secOffF.items}]};
+    case 'offenV': return {title:'Noch offene Verbindlichkeiten', hint:'Eingangsrechnungen, die ihr noch zahlen müsst.', sections:[{label:secOffV.label, sign:1, items:secOffV.items}]};
+    case 'ist': return {title:'Aktueller Kontostand (Ist)', hint:'Eingenommenes Geld minus ausgegebenes Geld.', sections:[secEin, secAus]};
+    case 'prognoseOhne': return {title:'Kontostand ohne offene Verbindlichkeiten', hint:'Ist-Stand plus alle offenen Forderungen.', sections:[secEin, secAus, secOffF]};
+    case 'prognoseMit': return {title:'Voraussichtlicher Kontostand', hint:'Ist-Stand plus offene Forderungen, minus offene Verbindlichkeiten.', sections:[secEin, secAus, secOffF, secOffV]};
+    case 'verdient': return {title:'Verdient (netto, ohne USt)', hint:'Euer Umsatz ohne Umsatzsteuer aus bezahlten Forderungen.', sections:[{label:'Bezahlte Forderungen (netto)', sign:1, items:items(paidF,N)}]};
+    case 'ust': return {title:'Umsatzsteuer & Finanzamt', hint:'Die USt, die ihr euren Kunden berechnet habt, leitet ihr ans Finanzamt weiter. Davon zieht ihr die Vorsteuer (USt aus euren Eingangsrechnungen) ab. Die Differenz ist eure Zahllast (positiv = ihr zahlt) bzw. Erstattung.', sections:[{label:'Vereinnahmte USt (aus euren Rechnungen → ans Finanzamt)', sign:1, items:items(ford,U)},{label:'Vorsteuer (aus Eingangsrechnungen → zieht ihr ab)', sign:-1, items:items(verb,U)}]};
+  }
+  return null;
+}
+function showKontoDetail(key){
+  const d=kontoDetail(key); if(!d) return;
+  let total=0, html='';
+  d.sections.forEach(s=>{
+    const its=s.items.filter(it=>Math.abs(it.amount)>0.005);
+    const sub=its.reduce((a,b)=>a+b.amount,0); total+=s.sign*sub;
+    html+=`<div style="margin-top:14px"><div style="display:flex;justify-content:space-between;font-weight:600;font-size:13px"><span>${s.sign<0?'<i class="ti ti-minus" style="color:var(--red);vertical-align:-2px"></i> ':''}${s.label}</span><span style="color:${s.sign<0?'var(--red)':'var(--text)'}">${s.sign<0?'− ':''}${fmt(sub)}</span></div>`;
+    html+= its.length ? `<table style="margin-top:4px"><tbody>${its.map(it=>`<tr><td>${esc(it.label)}</td><td class="num">${fmt(it.amount)}</td></tr>`).join('')}</tbody></table>` : '<div class="hint" style="margin:4px 0">Keine Einträge.</div>';
+    html+='</div>';
+  });
+  document.getElementById('kontoDetailTitle').textContent=d.title;
+  document.getElementById('kontoDetailBody').innerHTML=`<p class="hint" style="margin:0 0 4px">${d.hint}</p>${html}<div style="display:flex;justify-content:space-between;font-weight:700;font-size:16px;border-top:2px solid var(--border);margin-top:14px;padding-top:10px"><span>Ergebnis</span><span>${fmt(total)}</span></div>`;
+  document.getElementById('kontoDetailModal').classList.add('open');
 }
 const dashFilter={Forderung:'offen', Verbindlichkeit:'offen'};
 function renderDash(){
@@ -1838,6 +1891,9 @@ function parseInvoiceText(t){
   const s=e.target.closest('[data-dstat]'); if(!s) return;
   const parts=s.dataset.dstat.split('|'); dashFilter[parts[0]]=parts[1]; renderDash();
 }));
+document.getElementById('kontoBox').addEventListener('click',e=>{ const k=e.target.closest('[data-konto]'); if(k) showKontoDetail(k.dataset.konto); });
+document.getElementById('kontoDetailClose').onclick=()=>document.getElementById('kontoDetailModal').classList.remove('open');
+document.getElementById('kontoDetailModal').addEventListener('click',e=>{ if(e.target.id==='kontoDetailModal') e.currentTarget.classList.remove('open'); });
 document.getElementById('dashForderungen').addEventListener('click',e=>{ const c=e.target.closest('[data-cust]'); if(c) openCustomer(c.dataset.cust); });
 document.getElementById('dashVerbindlichkeiten').addEventListener('click',e=>{ const v=e.target.closest('[data-vb]'); if(v) openForm('verbindlichkeiten', v.dataset.vb); });
 document.getElementById('ustOverview').addEventListener('click',e=>{
