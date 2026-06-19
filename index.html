@@ -422,6 +422,19 @@
       </section>
 
       <section class="view" id="view-email">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+          <div class="tabs" id="mailTabs" style="margin:0">
+            <button class="active" data-mfolder="gesendet">Gesendet</button>
+            <button data-mfolder="geplant">Geplant</button>
+            <button data-mfolder="wiederkehrend">Wiederkehrend</button>
+            <button data-mfolder="auto">Automatik & Vorlagen</button>
+          </div>
+          <button class="btn" id="mailNewBtn"><i class="ti ti-pencil-plus"></i> Neue E-Mail</button>
+        </div>
+        <div id="mailFolderView">
+          <div class="card"><div id="mailList"></div></div>
+        </div>
+        <div id="mailAutoView" style="display:none">
         <div class="card">
           <div class="head"><h3><i class="ti ti-robot" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>Automatische Zahlungserinnerungen</h3></div>
           <label style="display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer;margin-bottom:12px"><input type="checkbox" id="m-auto" style="width:18px;height:18px"> Automatische Erinnerungen aktivieren</label>
@@ -443,6 +456,7 @@
           <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:6px"><button class="btn" id="m-save"><i class="ti ti-device-floppy"></i> Speichern</button></div>
         </div>
         <p class="hint">Versand läuft über euer IONOS-Postfach (team@webtimez.com). Beim Senden einer Rechnung oder Erinnerung öffnet sich zuerst ein Editor, in dem du die E-Mail anpassen kannst, bevor sie rausgeht.</p>
+        </div>
       </section>
 
       <section class="view" id="view-einstellungen">
@@ -531,6 +545,43 @@
     <div class="modal-actions">
       <button type="button" class="btn ghost" style="color:var(--text)" id="terminCancel">Abbrechen</button>
       <button type="button" class="btn" id="terminSave">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Mail-Client: neue E-Mail (frei / geplant / wiederkehrend / Serie) -->
+<div class="modal-overlay" id="mailComposeModal" style="z-index:74">
+  <div class="modal wide">
+    <h3>Neue E-Mail</h3>
+    <div class="field"><label>Empfänger (mehrere mit Komma trennen)</label>
+      <textarea id="mc-to" rows="2" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-family:inherit" placeholder="name@firma.de, …"></textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+        <select id="mc-kunde" style="flex:1;min-width:160px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;font-size:13px"></select>
+        <button type="button" class="btn ghost" style="color:var(--text);padding:7px 11px;font-size:13px" id="mc-addkunde">+ Kunde</button>
+        <button type="button" class="btn ghost" style="color:var(--text);padding:7px 11px;font-size:13px" id="mc-allkunden">Alle Kunden mit E-Mail</button>
+      </div>
+    </div>
+    <div class="field"><label>Betreff</label><input id="mc-subject" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px"></div>
+    <div class="field"><label>Nachricht</label><textarea id="mc-body" rows="9" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-family:inherit"></textarea></div>
+    <div class="field"><label>Versand</label>
+      <select id="mc-mode" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px">
+        <option value="sofort">Jetzt sofort senden</option>
+        <option value="geplant">Geplant – zu einem Zeitpunkt automatisch senden</option>
+        <option value="wiederkehrend">Wiederkehrend – regelmäßig automatisch senden</option>
+      </select>
+    </div>
+    <div class="field" id="mc-when-wrap" style="display:none"><label>Sende-Zeitpunkt</label><input id="mc-when" type="datetime-local" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px"></div>
+    <div id="mc-rep-wrap" style="display:none">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:150px"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px">Rhythmus</label><select id="mc-rep" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px"><option>Täglich</option><option>Wöchentlich</option><option selected>Monatlich</option><option>Jährlich</option></select></div>
+        <div style="flex:1;min-width:150px"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px">Erster Versand am</label><input id="mc-start" type="date" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px"></div>
+      </div>
+      <p class="hint" style="margin:6px 0 0">Wiederkehrende E-Mails enthalten keinen Datei-Anhang.</p>
+    </div>
+    <div class="field" id="mc-file-wrap"><label>Anhang (optional, nur bei „sofort senden")</label><input type="file" id="mc-file"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" style="color:var(--text)" id="mailComposeCancel">Abbrechen</button>
+      <button type="button" class="btn" id="mailComposeSend"><i class="ti ti-send"></i> <span id="mc-send-label">Senden</span></button>
     </div>
   </div>
 </div>
@@ -816,7 +867,7 @@ const SET_FIELDS=[
 ];
 
 const KEY='webtimez_is_v2';
-let store = {rechnungen:[],kunden:[],lieferanten:[],personal:[],aufgaben:[],termine:[],belege:[],zugaenge:[],profiles:[],teilnahme:[],gruppen:[],gruppenMitglieder:[],settings:{}};
+let store = {rechnungen:[],kunden:[],lieferanten:[],personal:[],aufgaben:[],termine:[],belege:[],zugaenge:[],profiles:[],teilnahme:[],gruppen:[],gruppenMitglieder:[],emails:[],settings:{}};
 const persist = () => { try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} };
 
 /* ---------- Supabase-Anbindung ---------- */
@@ -848,6 +899,7 @@ async function loadAll(){
   const {data:tt}=await sb.from('termin_teilnahme').select('*'); store.teilnahme=tt||[];
   try{ const {data:gr}=await sb.from('gruppen').select('*').order('created_at'); store.gruppen=gr||[]; }catch(e){ store.gruppen=[]; }
   try{ const {data:gm}=await sb.from('gruppen_mitglieder').select('*'); store.gruppenMitglieder=gm||[]; }catch(e){ store.gruppenMitglieder=[]; }
+  try{ const {data:em}=await sb.from('emails').select('*').order('created_at',{ascending:false}); store.emails=em||[]; }catch(e){ store.emails=[]; }
   try{ const {data:u}=await sb.auth.getUser(); MY_ID=u&&u.user?u.user.id:null; }catch(e){}
   const {data:s}=await sb.from('settings').select('data').eq('id',1).maybeSingle(); store.settings=(s&&s.data)||{};
   renderAll();
@@ -1566,6 +1618,7 @@ function renderEmailView(){
   document.getElementById('m-rtext').value=c.rText;
   document.getElementById('m-mbetreff').value=c.mBetreff;
   document.getElementById('m-mtext').value=c.mText;
+  renderMailFolder();
 }
 document.getElementById('m-save').onclick=async ()=>{
   store.settings.mail={
@@ -1584,6 +1637,98 @@ document.getElementById('m-runnow').onclick=async ()=>{
   if(!confirm('Jetzt alle überfälligen Forderungen prüfen und Erinnerungen an die Kunden senden?')) return;
   try{ const {data,error}=await sb.functions.invoke('daily-reminders',{ body:{ force:true } }); if(error||(data&&data.error)) throw new Error((data&&data.error)||(error&&error.message)); alert('Geprüft: '+(data.geprueft||0)+' überfällige Forderung(en) · gesendet: '+(data.sent||0)+' Erinnerung(en).'); }
   catch(e){ alert('Fehler: '+(e.message||e)); }
+};
+
+/* ---------- E-Mail-Postfach (Schreiben / Gesendet / Geplant / Wiederkehrend) ---------- */
+let mailFolder='gesendet';
+function renderMailFolder(){
+  document.querySelectorAll('#mailTabs button').forEach(b=>b.classList.toggle('active', b.dataset.mfolder===mailFolder));
+  const auto=mailFolder==='auto';
+  document.getElementById('mailAutoView').style.display=auto?'block':'none';
+  document.getElementById('mailFolderView').style.display=auto?'none':'block';
+  if(auto) return;
+  const el=document.getElementById('mailList');
+  let list, empty;
+  if(mailFolder==='geplant'){ list=store.emails.filter(e=>e.status==='geplant'); empty='Keine geplanten E-Mails.'; }
+  else if(mailFolder==='wiederkehrend'){ list=store.emails.filter(e=>e.status==='wiederkehrend'); empty='Keine wiederkehrenden E-Mails.'; }
+  else { list=store.emails.filter(e=>e.status==='gesendet'||e.status==='fehler'); empty='Noch nichts gesendet.'; }
+  if(!list.length){ el.innerHTML=emptyState(empty,'ti-mail'); return; }
+  el.innerHTML='<div class="doclist">'+list.map(e=>{
+    let meta;
+    if(mailFolder==='geplant') meta='geplant für '+new Date(e.senden_am).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+    else if(mailFolder==='wiederkehrend') meta=(e.wiederholung||'')+' · nächster Versand '+fmtD(e.naechster_lauf);
+    else meta=(e.gesendet_am?new Date(e.gesendet_am).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'');
+    const badge = e.status==='fehler' ? '<span class="pill red" style="font-size:11px">Fehler</span>' : (mailFolder==='gesendet'?'<span class="pill green" style="font-size:11px">Gesendet</span>':'');
+    return `<div class="row" style="align-items:flex-start"><div class="grow" style="white-space:normal"><div style="font-weight:500">${esc(e.betreff||'(kein Betreff)')}</div><div style="font-size:12px;color:var(--muted)">An: ${esc(e.empfaenger||'–')}</div><div style="font-size:11px;color:var(--hint)">${esc(meta)}${e.fehler?' · '+esc(e.fehler):''}</div></div>${badge}<i class="ti ti-trash iconbtn" data-emaildel="${e.id}" title="Löschen"></i></div>`;
+  }).join('')+'</div>';
+}
+document.getElementById('mailTabs').addEventListener('click',e=>{ const b=e.target.closest('[data-mfolder]'); if(b){ mailFolder=b.dataset.mfolder; renderMailFolder(); } });
+document.getElementById('mailList').addEventListener('click',async e=>{
+  const d=e.target.closest('[data-emaildel]'); if(!d) return;
+  if(!confirm('Eintrag löschen?')) return;
+  try{ await sb.from('emails').delete().eq('id',d.dataset.emaildel); store.emails=store.emails.filter(x=>x.id!==d.dataset.emaildel); renderMailFolder(); }
+  catch(err){ alert('Löschen fehlgeschlagen: '+(err.message||err)); }
+});
+function openMailCompose(){
+  document.getElementById('mc-to').value=''; document.getElementById('mc-subject').value=''; document.getElementById('mc-body').value='';
+  document.getElementById('mc-mode').value='sofort';
+  const sel=document.getElementById('mc-kunde');
+  const withMail=store.kunden.filter(k=>k.email);
+  sel.innerHTML='<option value="">— Kunde wählen —</option>'+withMail.map(k=>`<option value="${esc(k.email)}">${esc(k.name||k.email)}</option>`).join('');
+  const now=new Date(Date.now()-new Date().getTimezoneOffset()*60000); document.getElementById('mc-when').value=now.toISOString().slice(0,16);
+  document.getElementById('mc-start').value=todayStr;
+  const f=document.getElementById('mc-file'); if(f) f.value='';
+  mcModeChange();
+  document.getElementById('mailComposeModal').classList.add('open');
+}
+function mcModeChange(){
+  const m=document.getElementById('mc-mode').value;
+  document.getElementById('mc-when-wrap').style.display=m==='geplant'?'block':'none';
+  document.getElementById('mc-rep-wrap').style.display=m==='wiederkehrend'?'block':'none';
+  document.getElementById('mc-file-wrap').style.display=m==='sofort'?'block':'none';
+  document.getElementById('mc-send-label').textContent=m==='sofort'?'Senden':(m==='geplant'?'Planen':'Einrichten');
+}
+document.getElementById('mc-mode').onchange=mcModeChange;
+document.getElementById('mailNewBtn').onclick=openMailCompose;
+document.getElementById('mailComposeCancel').onclick=()=>document.getElementById('mailComposeModal').classList.remove('open');
+document.getElementById('mc-addkunde').onclick=()=>{ const v=document.getElementById('mc-kunde').value; if(!v) return; const ta=document.getElementById('mc-to'); const cur=ta.value.trim(); if(cur.split(/[,;]/).map(x=>x.trim()).includes(v)) return; ta.value=cur?(cur.replace(/[,;\s]*$/,'')+', '+v):v; };
+document.getElementById('mc-allkunden').onclick=()=>{ document.getElementById('mc-to').value=store.kunden.filter(k=>k.email).map(k=>k.email).join(', '); };
+document.getElementById('mailComposeSend').onclick=async ()=>{
+  const recips=document.getElementById('mc-to').value.split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean);
+  const subject=document.getElementById('mc-subject').value.trim();
+  const text=document.getElementById('mc-body').value;
+  const mode=document.getElementById('mc-mode').value;
+  if(!recips.length){ alert('Bitte mindestens einen Empfänger angeben.'); return; }
+  if(!subject){ alert('Bitte einen Betreff angeben.'); return; }
+  const btn=document.getElementById('mailComposeSend'); const orig=btn.innerHTML; btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> …';
+  try{
+    if(mode==='sofort'){
+      let attachments=[]; const f=document.getElementById('mc-file').files[0];
+      if(f){ if(f.size>9*1024*1024){ alert('Anhang zu groß (max. 9 MB).'); btn.disabled=false; btn.innerHTML=orig; return; } attachments=[{filename:f.name,content:(await fileToDataUrl(f)).split(',')[1],contentType:f.type||'application/octet-stream'}]; }
+      let ok=0, fail=0, lastErr='';
+      for(const to of recips){
+        try{ const {data,error}=await sb.functions.invoke('send-email',{ body:{ to, subject, text, html:text.replace(/\n/g,'<br>'), replyTo:(store.settings&&store.settings.email)||undefined, attachments } }); if(error||(data&&data.error)) throw new Error((data&&data.error)||error.message); ok++; }
+        catch(e){ fail++; lastErr=e.message||String(e); }
+      }
+      const {data:row}=await sb.from('emails').insert({betreff:subject,text,empfaenger:recips.join(', '),status:fail&&!ok?'fehler':'gesendet',gesendet_am:new Date().toISOString(),erstellt_von:MY_ID,fehler:fail?(fail+' fehlgeschlagen: '+lastErr):null}).select().single();
+      if(row) store.emails.unshift(row);
+      alert('Gesendet: '+ok+(fail?(' · Fehlgeschlagen: '+fail+' ('+lastErr+')'):'')+'.');
+    } else if(mode==='geplant'){
+      const when=document.getElementById('mc-when').value; if(!when){ alert('Bitte einen Zeitpunkt wählen.'); btn.disabled=false; btn.innerHTML=orig; return; }
+      const {data:row}=await sb.from('emails').insert({betreff:subject,text,empfaenger:recips.join(', '),status:'geplant',senden_am:new Date(when).toISOString(),erstellt_von:MY_ID}).select().single();
+      if(row) store.emails.unshift(row);
+      alert('E-Mail geplant für '+new Date(when).toLocaleString('de-DE')+'.');
+    } else {
+      const rep=document.getElementById('mc-rep').value; const start=document.getElementById('mc-start').value; if(!start){ alert('Bitte ein Startdatum wählen.'); btn.disabled=false; btn.innerHTML=orig; return; }
+      const {data:row}=await sb.from('emails').insert({betreff:subject,text,empfaenger:recips.join(', '),status:'wiederkehrend',wiederholung:rep,naechster_lauf:start,erstellt_von:MY_ID}).select().single();
+      if(row) store.emails.unshift(row);
+      alert('Wiederkehrende E-Mail eingerichtet ('+rep+', ab '+fmtD(start)+').');
+    }
+    document.getElementById('mailComposeModal').classList.remove('open');
+    mailFolder = mode==='sofort'?'gesendet':(mode==='geplant'?'geplant':'wiederkehrend');
+    renderMailFolder();
+  }catch(e){ alert('Fehler: '+(e.message||e)); }
+  finally{ btn.disabled=false; btn.innerHTML=orig; }
 };
 document.getElementById('invSend').onclick=()=>sendInvoice(invId);
 
