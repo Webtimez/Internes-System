@@ -702,7 +702,7 @@ async function dbDelete(key,id){ const {error}=await sb.from(TABLE[key]).delete(
 async function saveSettings(){ if(sb) await sb.from('settings').upsert({id:1,data:store.settings}); }
 async function loadAll(){
   for(const key of Object.keys(TABLE)){ const {data,error}=await sb.from(TABLE[key]).select(SELECT[key]||'*').order('created_at',{ascending:true}); if(!error&&data) store[key]=data.map(r=>fromDb(key,r)); }
-  const {data:b}=await sb.from('belege').select('id,name,groesse,kunde_id,created_at').order('created_at',{ascending:false}); store.belege=b||[];
+  const {data:b}=await sb.from('belege').select('id,name,groesse,kunde_id,art,created_at').order('created_at',{ascending:false}); store.belege=b||[];
   const {data:z}=await sb.from('zugaenge').select('*').order('created_at',{ascending:true}); store.zugaenge=z||[];
   const {data:pf}=await sb.from('profiles').select('id,name,email,rolle').order('name'); store.profiles=pf||[];
   const {data:tt}=await sb.from('termin_teilnahme').select('*'); store.teilnahme=tt||[];
@@ -725,9 +725,9 @@ async function downloadLibBeleg(id){
   if(error||!data||!data.data){ alert('Beleg nicht gefunden.'); return; }
   triggerDownload(data.data, data.name);
 }
-async function uploadBelegFile(file, kundeId){
+async function uploadBelegFile(file, kundeId, art){
   const url=await fileToDataUrl(file);
-  const {data,error}=await sb.from('belege').insert({name:file.name,data:url,groesse:file.size,kunde_id:kundeId||null}).select('id,name,groesse,kunde_id,created_at').single();
+  const {data,error}=await sb.from('belege').insert({name:file.name,data:url,groesse:file.size,kunde_id:kundeId||null,art:art||'Beleg'}).select('id,name,groesse,kunde_id,art,created_at').single();
   if(error) throw error; store.belege.unshift(data); return data;
 }
 async function deleteBelegLib(id){
@@ -1386,7 +1386,7 @@ document.getElementById('setOpenBtn').onclick=openSettings;
 document.getElementById('importFile').onchange=e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ try{ store={...store,...JSON.parse(r.result)}; renderAll(); }catch(err){ alert('Datei konnte nicht gelesen werden.'); } }; r.readAsText(f); };
 
 /* ---------- Kunden-Detailansicht ---------- */
-let currentCust=null, pendingCustDir=null;
+let currentCust=null, pendingCustDir=null, pendingDocArt=null;
 function openCustomer(id){
   const k=store.kunden.find(x=>x.id===id); if(!k) return; currentCust=id;
   document.getElementById('custName').innerHTML=`${esc(k.name||'–')} <span class="pill ${statusCls(k.status)}" style="font-size:12px;vertical-align:2px">${esc(k.status||'')}</span>`;
@@ -1399,9 +1399,11 @@ function openCustomer(id){
   const subHead=(label,sub,btnId)=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:14px 0 2px"><div><div style="font-size:13px;font-weight:600">${label}</div><div style="font-size:11px;color:var(--muted)">${sub}</div></div><button class="btn ghost" style="color:var(--text);padding:6px 10px;font-size:12px" id="${btnId}"><i class="ti ti-file-upload"></i> Rechnung hochladen</button></div>`;
   const invHtml = `${subHead('Forderungen an den Kunden','Der Kunde zahlt an uns','custUpFord')}${invTable(ford,'f')}${subHead('Verbindlichkeiten von dem Kunden','Wir zahlen an den Kunden','custUpVerb')}${invTable(verb,'v')}`;
   const docs=store.belege.filter(b=>b.kunde_id===k.id);
-  const docList=docs.length
-    ? '<div class="doclist">'+docs.map(b=>`<div class="row"><span class="grow">${esc(b.name||'Datei')}</span><span style="color:var(--muted);font-size:12px;margin:0 10px">${fmtD(b.created_at)}</span><i class="ti ti-download iconbtn" data-libdl="${b.id}"></i><i class="ti ti-trash iconbtn" data-libdel="${b.id}"></i></div>`).join('')+'</div>'
-    : '<div class="hint">Noch keine Dokumente. Lade Rechnungen/Belege zu diesem Kunden hoch.</div>';
+  const docListOf=(arr,leer)=> arr.length
+    ? '<div class="doclist">'+arr.map(b=>`<div class="row"><span class="grow">${esc(b.name||'Datei')}</span><span style="color:var(--muted);font-size:12px;margin:0 10px">${fmtD(b.created_at)}</span><i class="ti ti-download iconbtn" data-libdl="${b.id}"></i><i class="ti ti-trash iconbtn" data-libdel="${b.id}"></i></div>`).join('')+'</div>'
+    : `<div class="hint">${leer}</div>`;
+  const docsRechnung=docs.filter(b=>b.art==='Rechnung');
+  const docsBeleg=docs.filter(b=>b.art!=='Rechnung');
   const zug=store.zugaenge.filter(z=>z.kunde_id===k.id);
   const zugList=zug.length
     ? zug.map(z=>{ const an=store.lieferanten.find(a=>a.id===z.anbieter_id); const anbName=an?an.name:(z.anbieter_name||''); const href=z.url?(/^https?:/i.test(z.url)?z.url:'https://'+z.url):''; return `<div class="row" style="flex-wrap:wrap;gap:6px">
@@ -1422,8 +1424,10 @@ function openCustomer(id){
     ${row('Offener Betrag',`<b>${fmt(kundeOffen(k))}</b>`)}
     ${row('Notiz',esc(k.notiz||'').replace(/\n/g,'<br>'))}
     <div style="margin:22px 0 0"><h3 style="font-size:14px;margin:0">Rechnungen</h3><p class="hint" style="margin:3px 0 0">Lade Rechnungen je Richtung hoch – die KI liest sie aus, du kannst die Werte vor dem Speichern korrigieren.</p></div>${invHtml}
-    <div style="display:flex;justify-content:space-between;align-items:center;margin:22px 0 6px"><h3 style="font-size:14px;margin:0">Dokumente / Belege</h3><button class="btn ghost" style="color:var(--text)" id="custDocUpload"><i class="ti ti-upload"></i> Beleg hochladen</button></div>
-    ${docList}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:22px 0 6px"><h3 style="font-size:14px;margin:0">Rechnungen (Ablage)</h3><button class="btn ghost" style="color:var(--text)" id="custDocUpRechnung"><i class="ti ti-upload"></i> Rechnung ablegen</button></div>
+    ${docListOf(docsRechnung,'Noch keine Rechnungen abgelegt.')}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:22px 0 6px"><h3 style="font-size:14px;margin:0">Belege (Ablage)</h3><button class="btn ghost" style="color:var(--text)" id="custDocUpBeleg"><i class="ti ti-upload"></i> Beleg ablegen</button></div>
+    ${docListOf(docsBeleg,'Noch keine Belege abgelegt.')}
     <div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 6px"><h3 style="font-size:14px;margin:0">Zugänge / Logins</h3><button class="btn ghost" style="color:var(--text)" id="custZugAdd"><i class="ti ti-plus"></i> Zugang</button></div>
     ${zugList}
     <p class="hint" style="margin-top:8px">Passwörter sind ausgeblendet – Auge zum Einblenden. Gespeichert in eurer Datenbank (Login-geschützt).</p>`;
@@ -1439,7 +1443,8 @@ document.getElementById('custBody').addEventListener('click',e=>{
   const vb=e.target.closest('[data-vbedit]'); if(vb){ document.getElementById('custModal').classList.remove('open'); openForm('verbindlichkeiten', vb.dataset.vbedit); return; }
   const dl=e.target.closest('[data-libdl]'); if(dl){ downloadLibBeleg(dl.dataset.libdl); return; }
   const del=e.target.closest('[data-libdel]'); if(del){ if(confirm('Dokument löschen?')) deleteBelegLib(del.dataset.libdel).then(()=>openCustomer(currentCust)).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); return; }
-  if(e.target.closest('#custDocUpload')){ document.getElementById('custDocFile').click(); return; }
+  if(e.target.closest('#custDocUpRechnung')){ pendingDocArt='Rechnung'; document.getElementById('custDocFile').click(); return; }
+  if(e.target.closest('#custDocUpBeleg')){ pendingDocArt='Beleg'; document.getElementById('custDocFile').click(); return; }
   if(e.target.closest('#custUpFord')){ pendingCustDir='Forderung'; document.getElementById('custRechnungFile').click(); return; }
   if(e.target.closest('#custUpVerb')){ pendingCustDir='Verbindlichkeit'; document.getElementById('custRechnungFile').click(); return; }
   if(e.target.closest('#custZugAdd')){ openZugang(currentCust,null); return; }
@@ -1521,9 +1526,10 @@ document.getElementById('terminSave').onclick=async ()=>{
   }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
 };
 document.getElementById('custDocFile').onchange=async e=>{
-  const files=[...e.target.files]; if(!files.length||!currentCust) return;
-  const btn=document.getElementById('custDocUpload'); if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> Lädt…'; }
-  try{ for(const f of files) await uploadBelegFile(f, currentCust); openCustomer(currentCust); renderDash(); }
+  const files=[...e.target.files]; if(!files.length||!currentCust){ pendingDocArt=null; return; }
+  const art=pendingDocArt||'Beleg'; pendingDocArt=null;
+  const btn=document.getElementById(art==='Rechnung'?'custDocUpRechnung':'custDocUpBeleg'); if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> Lädt…'; }
+  try{ for(const f of files) await uploadBelegFile(f, currentCust, art); openCustomer(currentCust); renderDash(); }
   catch(err){ alert('Upload fehlgeschlagen: '+(err.message||err)); }
   finally{ e.target.value=''; }
 };
