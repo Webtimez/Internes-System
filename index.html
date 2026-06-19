@@ -284,7 +284,6 @@
       <a data-view="personal"><i class="ti ti-id-badge-2"></i> Personal</a>
       <a data-view="kalender"><i class="ti ti-calendar"></i> Kalender</a>
       <a data-view="todo"><i class="ti ti-checklist"></i> To-Do</a>
-      <a data-view="zeit"><i class="ti ti-clock"></i> Zeiterfassung</a>
       <a data-view="nachrichten"><i class="ti ti-message-circle"></i> Nachrichten <span id="navUnread" class="unread" style="display:none;margin-left:auto"></span></a>
       <div class="navgroup">System</div>
       <a data-view="einstellungen"><i class="ti ti-settings"></i> Einstellungen</a>
@@ -430,17 +429,6 @@
           <select id="todoZeit" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px"><option value="">Alle</option><option value="offen">Nur offene</option><option value="erledigt">Nur erledigte</option><option value="ueber">Überfällig</option><option value="heute">Heute</option><option value="woche">Diese Woche</option><option value="ohne">Ohne Datum</option></select>
         </div>
         <div class="card"><div id="todoFull"></div></div>
-      </section>
-
-      <section class="view" id="view-zeit">
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
-          <select id="zeitKunde" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px;min-width:160px"></select>
-          <input id="zeitProjekt" placeholder="Projekt / Stichwort…" style="flex:1;min-width:150px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px">
-          <select id="zeitStatus" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px"><option value="offen">Nur offene</option><option value="abgerechnet">Abgerechnet</option><option value="">Alle</option></select>
-          <button class="btn" id="zeitNewBtn"><i class="ti ti-plus"></i> Zeit erfassen</button>
-        </div>
-        <div class="card" style="margin-bottom:14px"><div id="zeitSummary"></div></div>
-        <div class="card"><div id="zeitTable"></div></div>
       </section>
 
       <section class="view" id="view-nachrichten">
@@ -786,18 +774,6 @@
   </div>
 </div>
 
-<!-- Zeiteintrag -->
-<div class="modal-overlay" id="zeitModal">
-  <div class="modal">
-    <h3 id="zeitTitle">Zeit erfassen</h3>
-    <div id="zeitBody"></div>
-    <div class="modal-actions">
-      <button type="button" class="btn ghost" style="color:var(--text)" id="zeitCancel">Abbrechen</button>
-      <button type="button" class="btn" id="zeitSave">Speichern</button>
-    </div>
-  </div>
-</div>
-
 <!-- Abo (wiederkehrende Rechnung) -->
 <div class="modal-overlay" id="aboModal">
   <div class="modal">
@@ -971,7 +947,6 @@ const SET_FIELDS=[
   {k:'bic', l:'BIC', ph:'optional', half:true},
   {k:'bank', l:'Bank', ph:'Name der Bank', half:true},
   {k:'ust', l:'USt-Satz Standard (%)', ph:'19', half:true},
-  {k:'stundensatz', l:'Stundensatz Standard (€)', ph:'z. B. 90', half:true},
   {k:'kleinunternehmer', l:'Kleinunternehmer nach §19 UStG – keine Umsatzsteuer ausweisen', t:'check'},
   {k:'footer', l:'Fußzeile', ph:'z. B. Kleinunternehmer-Hinweis oder Danksagung', area:true},
 ];
@@ -1997,8 +1972,7 @@ function go(view){
   if(view==='intern'){ const t=document.getElementById('internNotes'); if(t) t.value=(store.settings&&store.settings.interneNotizen)||''; }
   if(view==='nachrichten') renderNachrichten();
   if(view==='email') renderEmailView();
-  if(view==='zeit') renderZeit();
-  if(view==='dashboard'||view==='einstellungen'||view==='intern'||view==='nachrichten'||view==='email'||view==='zeit'){ pa.style.display='none'; return; }
+  if(view==='dashboard'||view==='einstellungen'||view==='intern'||view==='nachrichten'||view==='email'){ pa.style.display='none'; return; }
   const finTab=view==='finanzen'?document.querySelector('#finTabs button.active').dataset.tab:null;
   const hideActions=finTab==='AblageRechnung'||finTab==='AblageBeleg';
   if(view==='finanzen'){ document.getElementById('pdfBtn').style.display=(hideActions||finTab==='Abos'||finTab==='Angebot'||finTab==='Kontoabgleich')?'none':''; }
@@ -2271,85 +2245,6 @@ async function convertAngebot(id){
     renderAll(); openInvoice(row.id);
   }catch(e){ alert('Fehler: '+(e.message||e)); }
 }
-/* ---------- Zeiterfassung ---------- */
-let zeitEditId=null;
-function zeitDefaultSatz(){ return parseFloat(store.settings.stundensatz)||0; }
-function fillZeitKunde(){ const sel=document.getElementById('zeitKunde'); if(!sel) return; const cur=sel.value; sel.innerHTML='<option value="">Alle Kunden</option>'+store.kunden.map(k=>`<option value="${k.id}">${esc(k.name||'')}</option>`).join(''); sel.value=cur; }
-function renderZeit(){
-  fillZeitKunde();
-  const kid=document.getElementById('zeitKunde').value;
-  const q=(document.getElementById('zeitProjekt').value||'').toLowerCase();
-  const status=document.getElementById('zeitStatus').value;
-  let list=store.zeiten.slice();
-  if(kid) list=list.filter(z=>z.kunde_id===kid);
-  if(q) list=list.filter(z=>((z.projekt||'')+' '+(z.beschreibung||'')).toLowerCase().includes(q));
-  if(status==='offen') list=list.filter(z=>!z.abgerechnet);
-  else if(status==='abgerechnet') list=list.filter(z=>z.abgerechnet);
-  const betrag=z=>(Number(z.dauer)||0)*(Number(z.stundensatz)||0);
-  const offen=list.filter(z=>!z.abgerechnet);
-  const sumH=offen.reduce((a,z)=>a+(Number(z.dauer)||0),0); const sumB=offen.reduce((a,z)=>a+betrag(z),0);
-  const k=store.kunden.find(x=>x.id===kid);
-  document.getElementById('zeitSummary').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><div><b>${sumH.toFixed(2).replace('.',',')} Std</b> offen${k?(' für '+esc(k.name)):''} · <b>${fmt(sumB)}</b></div>${(kid&&offen.length)?`<button class="btn" id="zeitBillBtn"><i class="ti ti-receipt"></i> Offene Stunden abrechnen</button>`:'<span class="hint" style="margin:0">Kunde wählen, um offene Stunden abzurechnen.</span>'}</div>`;
-  const el=document.getElementById('zeitTable');
-  if(!list.length){ el.innerHTML=emptyState('Keine Einträge.','ti-clock'); return; }
-  let h='<table><thead><tr><th>Datum</th><th>Kunde</th><th>Projekt</th><th>Beschreibung</th><th class="num">Std</th><th class="num">Satz</th><th class="num">Betrag</th><th>Status</th><th class="act"></th></tr></thead><tbody>';
-  list.forEach(z=>{ h+=`<tr><td>${fmtD(z.datum)}</td><td>${esc(z.partner||'')}</td><td>${esc(z.projekt||'')}</td><td>${esc(z.beschreibung||'')}</td><td class="num">${(Number(z.dauer)||0).toFixed(2).replace('.',',')}</td><td class="num">${fmt(z.stundensatz)}</td><td class="num">${fmt(betrag(z))}</td><td>${z.abgerechnet?'<span class="pill green">abgerechnet</span>':'<span class="pill amber">offen</span>'}</td><td class="act">${z.abgerechnet?'':`<i class="ti ti-edit iconbtn" data-zeitedit="${z.id}"></i><i class="ti ti-trash iconbtn" data-zeitdel="${z.id}"></i>`}</td></tr>`; });
-  el.innerHTML=h+'</tbody></table>';
-}
-function openZeit(id){
-  if(!store.kunden.length){ alert('Bitte zuerst einen Kunden im CRM anlegen.'); return; }
-  const z=id?store.zeiten.find(x=>x.id===id):{}; zeitEditId=id||null;
-  const presetKid=z.kunde_id||document.getElementById('zeitKunde').value||'';
-  const opts=store.kunden.map(k=>`<option value="${k.id}" ${presetKid===k.id?'selected':''}>${esc(k.name||'')}</option>`).join('');
-  document.getElementById('zeitTitle').textContent=id?'Zeit bearbeiten':'Zeit erfassen';
-  document.getElementById('zeitBody').innerHTML=`
-    <div class="field"><label>Kunde</label><select id="z-kunde">${opts}</select></div>
-    <div class="field half"><label>Projekt</label><input id="z-projekt" value="${esc(z.projekt||'')}" placeholder="z. B. Website Relaunch"></div>
-    <div class="field half"><label>Datum</label><input id="z-datum" type="date" value="${z.datum||todayStr}"></div>
-    <div class="field half"><label>Dauer (Stunden)</label><input id="z-dauer" type="number" step="0.25" value="${z.dauer!=null?esc(z.dauer):''}" placeholder="z. B. 1.5"></div>
-    <div class="field half"><label>Stundensatz (€)</label><input id="z-satz" type="number" step="0.01" value="${z.stundensatz!=null?esc(z.stundensatz):zeitDefaultSatz()}"></div>
-    <div class="field"><label>Beschreibung</label><textarea id="z-besch" placeholder="Was wurde gemacht?">${esc(z.beschreibung||'')}</textarea></div>`;
-  document.getElementById('zeitModal').classList.add('open');
-}
-document.getElementById('zeitCancel').onclick=()=>document.getElementById('zeitModal').classList.remove('open');
-document.getElementById('zeitSave').onclick=async ()=>{
-  const kid=document.getElementById('z-kunde').value; const k=store.kunden.find(x=>x.id===kid); if(!k){ alert('Bitte Kunde wählen.'); return; }
-  const obj={ kunde_id:kid, partner:k.name, projekt:document.getElementById('z-projekt').value.trim(), datum:document.getElementById('z-datum').value||todayStr, dauer:parseFloat(document.getElementById('z-dauer').value)||0, stundensatz:parseFloat(document.getElementById('z-satz').value)||0, beschreibung:document.getElementById('z-besch').value.trim() };
-  if(!obj.dauer){ alert('Bitte eine Dauer angeben.'); return; }
-  try{
-    if(zeitEditId){ const {data,error}=await sb.from('zeiten').update(obj).eq('id',zeitEditId).select().single(); if(error)throw error; const i=store.zeiten.findIndex(x=>x.id===zeitEditId); store.zeiten[i]=data; }
-    else { obj.abgerechnet=false; obj.erstellt_von=MY_ID; const {data,error}=await sb.from('zeiten').insert(obj).select().single(); if(error)throw error; store.zeiten.unshift(data); }
-    document.getElementById('zeitModal').classList.remove('open'); renderZeit();
-  }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
-};
-async function billZeiten(kid){
-  const k=store.kunden.find(x=>x.id===kid); if(!k) return;
-  const offen=store.zeiten.filter(z=>z.kunde_id===kid && !z.abgerechnet && (Number(z.dauer)||0)>0);
-  if(!offen.length){ alert('Keine offenen Stunden für diesen Kunden.'); return; }
-  const sumH=offen.reduce((a,z)=>a+(Number(z.dauer)||0),0);
-  const netto=Math.round(offen.reduce((a,z)=>a+(Number(z.dauer)||0)*(Number(z.stundensatz)||0),0)*100)/100;
-  if(!confirm(`${offen.length} Einträge (${sumH.toFixed(2).replace('.',',')} Std, ${fmt(netto)} netto) für ${k.name} in eine Rechnung umwandeln?`)) return;
-  const ustSatz=store.settings.kleinunternehmer?0:(parseFloat(store.settings.ust)||19);
-  const brutto=Math.round(netto*(1+ustSatz/100)*100)/100;
-  const projekte=[...new Set(offen.map(z=>z.projekt).filter(Boolean))].join(', ');
-  const leistung='Geleistete Stunden'+(projekte?(' – '+projekte):'')+' ('+sumH.toFixed(2).replace('.',',')+' Std)';
-  const data={ typ:'Forderung', kundeId:kid, partner:k.name, nr:nextInvoiceNr(), leistung, netto, ustSatz, betrag:brutto, datum:todayStr, leistungsdatum:todayStr, faellig:addDays(todayStr,k.zahlungsziel||14), status:'Offen', beschreibung:'Aus Zeiterfassung ('+offen.length+' Einträge)' };
-  try{
-    const row=await dbInsert('rechnungen',data); store.rechnungen.push(row);
-    for(const z of offen){ await sb.from('zeiten').update({abgerechnet:true,rechnung_id:row.id}).eq('id',z.id); z.abgerechnet=true; z.rechnung_id=row.id; }
-    renderAll(); openInvoice(row.id);
-  }catch(e){ alert('Fehler: '+(e.message||e)); }
-}
-document.getElementById('zeitNewBtn').onclick=()=>openZeit(null);
-document.getElementById('zeitKunde').onchange=renderZeit;
-document.getElementById('zeitProjekt').oninput=renderZeit;
-document.getElementById('zeitStatus').onchange=renderZeit;
-document.getElementById('zeitSummary').addEventListener('click',e=>{ if(e.target.closest('#zeitBillBtn')){ const kid=document.getElementById('zeitKunde').value; if(kid) billZeiten(kid); } });
-document.getElementById('zeitTable').addEventListener('click',e=>{
-  const ed=e.target.closest('[data-zeitedit]'); if(ed){ openZeit(ed.dataset.zeitedit); return; }
-  const dl=e.target.closest('[data-zeitdel]'); if(dl){ if(confirm('Eintrag löschen?')) sb.from('zeiten').delete().eq('id',dl.dataset.zeitdel).then(()=>{ store.zeiten=store.zeiten.filter(x=>x.id!==dl.dataset.zeitdel); renderZeit(); }); return; }
-});
-
 /* ---------- Kontoauszug-Import (CSV) & Abgleich ---------- */
 let bankMatches=[];
 function parseCsvLine(line, delim){ const out=[]; let cur='',q=false; for(let i=0;i<line.length;i++){ const c=line[i]; if(q){ if(c==='"'){ if(line[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; } else { if(c==='"') q=true; else if(c===delim){ out.push(cur); cur=''; } else cur+=c; } } out.push(cur); return out; }
