@@ -110,6 +110,10 @@
   .cal .day{cursor:pointer;}
   .cal.daylist{display:block;}
   .cal.weekview .day{min-height:120px;}
+  .cal.daylist .day.dayfull{min-height:200px; padding:14px 16px; font-size:14px;}
+  .cal.daylist .day.dayfull .n{font-size:14px; font-weight:600; color:var(--ink); display:block; margin-bottom:8px;}
+  .cal.daylist .day.dayfull .ev{font-size:13px; padding:9px 12px; margin-top:6px;}
+  .cal.daylist .day.dayfull .ev .evd{width:8px; height:8px;}
   .ev{cursor:pointer;}
   .dayrow{display:flex; align-items:center; gap:10px; padding:11px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; cursor:pointer;}
   .dayrow:hover{background:var(--surface);}
@@ -997,10 +1001,9 @@ function renderDay(grid){
   const wd=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'][d.getDay()];
   document.getElementById('calTitle').textContent=wd+', '+fmtD(ymd(d));
   const evs=eventsForDate(d);
-  const tl={rechnung:'Rechnung',termin:'Termin',aufgabe:'Aufgabe'};
-  grid.innerHTML = evs.length
-    ? evs.map(e=>`<div class="dayrow" data-evtype="${e.type}" data-evid="${e.id}"><span class="grow">${esc(e.label)}</span><span class="pill ${e.cls}" style="font-size:11px">${tl[e.type]}</span></div>`).join('')
-    : '<div class="empty"><i class="ti ti-calendar"></i>Keine Einträge an diesem Tag.</div>';
+  grid.innerHTML=`<div class="day dayfull ${isToday(d)?'today':''}" data-day="${ymd(d)}"><span class="n">${wd}, ${d.getDate()}.${d.getMonth()+1}.</span>${
+    evs.length ? evs.map(evSpan).join('') : '<div class="empty" style="padding:14px 4px"><i class="ti ti-calendar"></i>Keine Einträge an diesem Tag.</div>'
+  }</div>`;
 }
 function renderCalHits(q){
   const el=document.getElementById('calHits'); if(!el) return;
