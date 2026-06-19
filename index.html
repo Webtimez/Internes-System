@@ -287,6 +287,10 @@
         <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
           <button class="btn" id="internBtn"><i class="ti ti-lock"></i> Unternehmensinterne Daten</button>
         </div>
+        <div class="card" style="border-top:3px solid var(--pink)">
+          <div class="head"><h3><i class="ti ti-wallet" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>Kontoübersicht</h3></div>
+          <div id="kontoBox"></div>
+        </div>
         <div class="grid2">
           <div class="card" style="border-top:3px solid var(--green)">
             <div class="head"><h3><i class="ti ti-arrow-down-left" style="color:var(--green);vertical-align:-2px;margin-right:6px"></i>Wir bekommen noch · Forderungen</h3><span class="link" data-goto="finanzen">Alle <i class="ti ti-arrow-right"></i></span></div>
@@ -910,6 +914,38 @@ function vorsteuerBelegList(verb){
     return `<div class="row" style="flex-wrap:wrap;gap:8px"><span class="grow">${esc(r.nr||'–')} · ${esc(r.partner||'')} · ${fmtD(r.datum)}</span><span style="white-space:nowrap">USt ${fmt(ustOf(r))}</span>${belegCtrl}${dl}</div>`;
   }).join('');
 }
+function renderKonto(){
+  const act=store.rechnungen.filter(r=>r.status!=='Storniert');
+  const ford=act.filter(r=>r.typ==='Forderung'), verb=act.filter(r=>r.typ==='Verbindlichkeit');
+  const paid=a=>a.filter(r=>r.status==='Bezahlt');
+  const open=a=>a.filter(r=>r.status!=='Bezahlt');
+  const sumB=a=>a.reduce((s,r)=>s+(Number(r.betrag)||0),0);
+  const sumU=a=>a.reduce((s,r)=>s+ustOf(r),0);
+  const eingenommen=sumB(paid(ford)), ausgegeben=sumB(paid(verb));
+  const ist=eingenommen-ausgegeben;
+  const offenF=sumB(open(ford)), offenV=sumB(open(verb));
+  const prognoseMit=ist+offenF-offenV, prognoseOhne=ist+offenF;
+  const verdientNetto=eingenommen-sumU(paid(ford));
+  const ustSaldo=sumU(verb)-sumU(ford); // <0 => Zahllast ans Finanzamt
+  const zahllast=ustSaldo<0?-ustSaldo:0, erstattung=ustSaldo>0?ustSaldo:0;
+  const money=(v,col)=>`<span style="color:${col||'var(--text)'}">${fmt(v)}</span>`;
+  const big=(label,val,col,sub)=>`<div style="flex:1;min-width:150px;background:var(--surface);border-radius:10px;padding:14px 16px"><div style="font-size:12px;color:var(--muted)">${label}</div><div style="font-size:23px;font-weight:700;color:${col||'var(--text)'};margin-top:3px">${fmt(val)}</div>${sub?`<div style="font-size:11px;color:var(--muted);margin-top:3px;line-height:1.3">${sub}</div>`:''}</div>`;
+  document.getElementById('kontoBox').innerHTML=`
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      ${big('Aktueller Kontostand (Ist)', ist, ist>=0?'var(--green)':'var(--red)','Eingegangen minus ausgegeben')}
+      ${big('Voraussichtl. Kontostand', prognoseMit, prognoseMit>=0?'var(--green)':'var(--red)','inkl. offener Forderungen, abzüglich offener Verbindlichkeiten')}
+      ${big('Ohne offene Verbindlichkeiten', prognoseOhne, 'var(--text)','Ist + alle offenen Forderungen')}
+    </div>
+    <table><tbody>
+      <tr><td><i class="ti ti-arrow-down-left" style="color:var(--green);vertical-align:-2px"></i> Bereits eingenommen (bezahlte Rechnungen)</td><td class="num">${money(eingenommen,'var(--green)')}</td></tr>
+      <tr><td><i class="ti ti-arrow-up-right" style="color:var(--amber);vertical-align:-2px"></i> Bereits ausgegeben (bezahlte Verbindlichkeiten)</td><td class="num">${money(ausgegeben)}</td></tr>
+      <tr><td>Noch offene Forderungen (kommt noch rein)</td><td class="num">${money(offenF)}</td></tr>
+      <tr><td>Noch offene Verbindlichkeiten (geht noch raus)</td><td class="num">${money(offenV,'var(--red)')}</td></tr>
+      <tr><td><b>Verdient (netto, ohne USt)</b></td><td class="num"><b>${fmt(verdientNetto)}</b></td></tr>
+      <tr><td>${zahllast?'Voraussichtlich ans Finanzamt (USt-Zahllast)':'Voraussichtliche USt-Erstattung'}</td><td class="num">${money(zahllast||erstattung, zahllast?'var(--red)':'var(--green)')}</td></tr>
+    </tbody></table>
+    <p class="hint" style="margin-top:10px">„Verdient (netto)" ist euer Umsatz ohne Umsatzsteuer aus bezahlten Forderungen – die USt ist ein durchlaufender Posten und geht (verrechnet mit der Vorsteuer) ans Finanzamt. Eine Rechnung zählt als „bezahlt", sobald ihr sie in der Liste auf bezahlt setzt. Orientierungswerte, keine Steuerberatung.</p>`;
+}
 const dashFilter={Forderung:'offen', Verbindlichkeit:'offen'};
 function renderDash(){
   const sum=a=>a.reduce((s,r)=>s+(Number(r.betrag)||0),0);
@@ -941,6 +977,7 @@ function renderDash(){
   const pr={Hoch:0,Mittel:1,Niedrig:2};
   const mine=store.aufgaben.filter(a=>!a.done && isAssignedTo(a,MY_ID)).sort((a,b)=>((pr[a.prio]??1)-(pr[b.prio]??1))||((parseD(a.faellig)||Infinity)-(parseD(b.faellig)||Infinity)));
   renderTodoList('todoMini', mine.slice(0,5));
+  renderKonto();
   renderUst();
 }
 function renderTodoList(el,list){
