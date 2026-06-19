@@ -734,6 +734,12 @@ async function deleteBelegLib(id){
   const {error}=await sb.from('belege').delete().eq('id',id); if(error) throw error;
   store.belege=store.belege.filter(b=>b.id!==id);
 }
+async function togglePaid(id){
+  const r=store.rechnungen.find(x=>x.id===id); if(!r) return;
+  const neu = r.status==='Bezahlt' ? 'Offen' : 'Bezahlt';
+  try{ const row=await dbUpdate('rechnungen', id, {status:neu}); const i=store.rechnungen.findIndex(x=>x.id===id); if(i>=0) store.rechnungen[i]=row; renderAll(); }
+  catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
+}
 async function moveBelegFile(id, art){
   const {data,error}=await sb.from('belege').update({art}).eq('id',id).select('id,name,groesse,kunde_id,art,created_at').single();
   if(error) throw error; const i=store.belege.findIndex(b=>b.id===id); if(i>=0) store.belege[i]=data; return data;
@@ -780,9 +786,11 @@ function renderFin(typ){
   if(!data.length){ el.innerHTML=emptyState((q||st)?'Keine Treffer.':(typ==='Forderung'?'Noch keine Rechnungen. Oben rechts auf „+ Neue Rechnung".':'Noch keine Eingangsrechnungen. Oben rechts auf „+".'),'ti-receipt'); return; }
   let h='<table><thead><tr><th>Nummer</th><th>Partner</th><th>Datum</th><th>Fällig</th><th class="num">Betrag</th><th>Status</th><th class="act"></th></tr></thead><tbody>';
   data.forEach(r=>{
+    const paid=r.status==='Bezahlt';
+    const paidIcon=`<i class="ti ${paid?'ti-arrow-back-up':'ti-circle-check'} iconbtn" data-paid="${r.id}" title="${paid?'Wieder als offen markieren':'Als bezahlt markieren'}"${paid?'':' style="color:var(--green)"'}></i>`;
     const acts = typ==='Forderung'
-      ? `<i class="ti ti-eye iconbtn" data-inv="${r.id}" title="Rechnung ansehen"></i><i class="ti ti-mail iconbtn" data-mail="${r.id}" title="An Kunde senden"></i><i class="ti ti-edit iconbtn" data-genedit="${r.id}"></i><i class="ti ti-trash iconbtn" data-del="rechnungen" data-id="${r.id}"></i>`
-      : `${r.beleg_name?`<i class="ti ti-paperclip iconbtn" data-inlinedl="${r.id}" title="Angehängte Rechnung/Beleg: ${esc(r.beleg_name)}"></i>`:''}<i class="ti ti-edit iconbtn" data-edit="verbindlichkeiten" data-id="${r.id}"></i><i class="ti ti-trash iconbtn" data-del="rechnungen" data-id="${r.id}"></i>`;
+      ? `${paidIcon}<i class="ti ti-eye iconbtn" data-inv="${r.id}" title="Rechnung ansehen"></i><i class="ti ti-mail iconbtn" data-mail="${r.id}" title="An Kunde senden"></i><i class="ti ti-edit iconbtn" data-genedit="${r.id}"></i><i class="ti ti-trash iconbtn" data-del="rechnungen" data-id="${r.id}"></i>`
+      : `${paidIcon}${r.beleg_name?`<i class="ti ti-paperclip iconbtn" data-inlinedl="${r.id}" title="Angehängte Rechnung/Beleg: ${esc(r.beleg_name)}"></i>`:''}<i class="ti ti-edit iconbtn" data-edit="verbindlichkeiten" data-id="${r.id}"></i><i class="ti ti-trash iconbtn" data-del="rechnungen" data-id="${r.id}"></i>`;
     h+=`<tr><td>${esc(r.nr)||'–'}</td><td>${esc(r.partner)||'–'}</td><td>${fmtD(r.datum)}</td><td>${fmtD(r.faellig)}</td><td class="num">${fmt(r.betrag)}</td><td>${invPill(r)}</td><td class="act">${acts}</td></tr>`;
   });
   el.innerHTML=h+'</tbody></table>';
@@ -1325,6 +1333,7 @@ document.addEventListener('click',e=>{
   const g=e.target.closest('[data-goto]'); if(g) go(g.dataset.goto);
   const inv=e.target.closest('[data-inv]'); if(inv) openInvoice(inv.dataset.inv);
   const ml=e.target.closest('[data-mail]'); if(ml) openSend(ml.dataset.mail);
+  const pd=e.target.closest('[data-paid]'); if(pd){ togglePaid(pd.dataset.paid); return; }
   const ge=e.target.closest('[data-genedit]'); if(ge) openGen(ge.dataset.genedit);
   const ed=e.target.closest('[data-edit]'); if(ed) openForm(ed.dataset.edit, ed.dataset.id);
   const dl=e.target.closest('[data-del]'); if(dl){ const en=dl.dataset.del,id=dl.dataset.id; if(confirm('Eintrag löschen?')){ dbDelete(en,id).then(()=>{ store[en]=store[en].filter(r=>r.id!==id); renderAll(); }).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); } }
