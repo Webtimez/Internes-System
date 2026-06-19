@@ -322,7 +322,7 @@
           <div id="kontoBox"></div>
         </div>
         <div class="card">
-          <div class="head"><h3><i class="ti ti-chart-bar" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>Umsatz der letzten Monate</h3></div>
+          <div class="head"><h3><i class="ti ti-chart-bar" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>Finanzen analysieren</h3></div>
           <div id="umsatzChart"></div>
         </div>
         <div class="grid2">
@@ -1257,22 +1257,64 @@ function renderDash(){
   renderUmsatzChart();
   renderUst();
 }
+let dashChart={mode:'umsatz', range:6, paidOnly:false};
+const MONS=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+function dashFinRows(){
+  return store.rechnungen.filter(r=>r.status!=='Storniert' && r.typ!=='Angebot' && (!dashChart.paidOnly || r.status==='Bezahlt'));
+}
+function dashMonths(){
+  const arr=[]; const now=new Date();
+  if(dashChart.range==='jahr'){ for(let mn=0;mn<12;mn++){ const d=new Date(now.getFullYear(),mn,1); arr.push({y:d.getFullYear(),m:mn,label:MONS[mn],ein:0,aus:0}); } }
+  else { const n=dashChart.range; for(let i=n-1;i>=0;i--){ const d=new Date(now.getFullYear(),now.getMonth()-i,1); arr.push({y:d.getFullYear(),m:d.getMonth(),label:MONS[d.getMonth()]+' '+String(d.getFullYear()).slice(2),ein:0,aus:0}); } }
+  return arr;
+}
 function renderUmsatzChart(){
   const el=document.getElementById('umsatzChart'); if(!el) return;
-  const months=[]; const now=new Date();
-  for(let i=5;i>=0;i--){ const d=new Date(now.getFullYear(),now.getMonth()-i,1); months.push({y:d.getFullYear(),m:d.getMonth(),label:['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'][d.getMonth()],ein:0,aus:0}); }
-  store.rechnungen.forEach(r=>{ if(r.status==='Storniert') return; const base=r.datum||r.faellig; const d=parseD(base); if(!d) return; const slot=months.find(x=>x.y===d.getFullYear()&&x.m===d.getMonth()); if(!slot) return; const net=(Number(r.betrag)||0)-ustOf(r); if(r.typ==='Forderung') slot.ein+=net; else slot.aus+=net; });
-  const max=Math.max(1,...months.map(x=>Math.max(x.ein,x.aus)));
-  const W=520,H=170,pad=28,bw=(W-pad*2)/months.length;
+  const tabBtn=(g,v,l)=>`<button class="${String(dashChart[g])===String(v)?'active':''}" data-${g==='mode'?'cmode':'crange'}="${v}">${l}</button>`;
+  const toolbar=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+    <div class="tabs" style="margin:0">${tabBtn('mode','umsatz','Einnahmen/Ausgaben')}${tabBtn('mode','gewinn','Gewinn')}${tabBtn('mode','kunden','Top-Kunden')}</div>
+    <div class="tabs" style="margin:0">${tabBtn('range',6,'6 Mon.')}${tabBtn('range',12,'12 Mon.')}${tabBtn('range','jahr','Dieses Jahr')}</div>
+    <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="chartPaid" ${dashChart.paidOnly?'checked':''}> nur bezahlte</label>
+  </div>`;
+  const rows=dashFinRows();
+  if(dashChart.mode==='kunden'){ el.innerHTML=toolbar+chartKunden(rows); return; }
+  const months=dashMonths();
+  months.forEach(slot=>{});
+  rows.forEach(r=>{ const d=parseD(r.datum||r.faellig); if(!d) return; const slot=months.find(x=>x.y===d.getFullYear()&&x.m===d.getMonth()); if(!slot) return; const net=(Number(r.betrag)||0)-ustOf(r); if(r.typ==='Forderung') slot.ein+=net; else slot.aus+=net; });
+  const W=560,H=190,pad=30,bw=(W-pad*2)/months.length;
   let bars='';
-  months.forEach((x,i)=>{ const cx=pad+i*bw; const eh=(x.ein/max)*(H-pad-20), ah=(x.aus/max)*(H-pad-20);
-    bars+=`<rect x="${cx+bw*0.18}" y="${H-pad-eh}" width="${bw*0.28}" height="${eh}" rx="3" fill="var(--pink)"></rect>`;
-    bars+=`<rect x="${cx+bw*0.5}" y="${H-pad-ah}" width="${bw*0.28}" height="${ah}" rx="3" fill="var(--amber)"></rect>`;
-    bars+=`<text x="${cx+bw*0.5}" y="${H-pad+14}" text-anchor="middle" font-size="11" fill="var(--muted)">${x.label}</text>`;
-  });
-  el.innerHTML=`<div style="display:flex;gap:16px;font-size:12px;color:var(--muted);margin-bottom:8px"><span><span style="display:inline-block;width:10px;height:10px;background:var(--pink);border-radius:2px;vertical-align:-1px"></span> Einnahmen (netto)</span><span><span style="display:inline-block;width:10px;height:10px;background:var(--amber);border-radius:2px;vertical-align:-1px"></span> Ausgaben (netto)</span></div>
+  if(dashChart.mode==='gewinn'){
+    const vals=months.map(x=>x.ein-x.aus); const max=Math.max(1,...vals.map(v=>Math.abs(v))); const zero=H-pad-(0.5*(H-pad-24));
+    const scale=(H-pad-24)/2/max;
+    months.forEach((x,i)=>{ const g=x.ein-x.aus; const cx=pad+i*bw; const hgt=Math.abs(g)*scale; const y=g>=0?zero-hgt:zero;
+      bars+=`<rect x="${cx+bw*0.2}" y="${y}" width="${bw*0.6}" height="${hgt||0.5}" rx="3" fill="${g>=0?'var(--green)':'var(--red)'}"><title>${x.label}: ${fmt(g)} Gewinn</title></rect>`;
+      bars+=`<text x="${cx+bw*0.5}" y="${H-6}" text-anchor="middle" font-size="10" fill="var(--muted)">${x.label}</text>`; });
+    bars=`<line x1="${pad}" y1="${zero}" x2="${W-2}" y2="${zero}" stroke="var(--border)"></line>`+bars;
+    const tot=months.reduce((a,b)=>a+(b.ein-b.aus),0);
+    el.innerHTML=toolbar+`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${bars}</svg><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px"><span>Gewinn = Einnahmen − Ausgaben (netto)</span><span>Summe Zeitraum: <b style="color:${tot>=0?'var(--green)':'var(--red)'}">${fmt(tot)}</b></span></div>`;
+    return;
+  }
+  const max=Math.max(1,...months.map(x=>Math.max(x.ein,x.aus)));
+  months.forEach((x,i)=>{ const cx=pad+i*bw; const eh=(x.ein/max)*(H-pad-24), ah=(x.aus/max)*(H-pad-24);
+    bars+=`<rect x="${cx+bw*0.16}" y="${H-pad-eh}" width="${bw*0.3}" height="${eh||0.5}" rx="3" fill="var(--pink)"><title>${x.label}: ${fmt(x.ein)} Einnahmen</title></rect>`;
+    bars+=`<rect x="${cx+bw*0.5}" y="${H-pad-ah}" width="${bw*0.3}" height="${ah||0.5}" rx="3" fill="var(--amber)"><title>${x.label}: ${fmt(x.aus)} Ausgaben</title></rect>`;
+    bars+=`<text x="${cx+bw*0.5}" y="${H-pad+14}" text-anchor="middle" font-size="10" fill="var(--muted)">${x.label}</text>`; });
+  const sumE=months.reduce((a,b)=>a+b.ein,0), sumA=months.reduce((a,b)=>a+b.aus,0);
+  el.innerHTML=toolbar+`<div style="display:flex;gap:16px;font-size:12px;color:var(--muted);margin-bottom:8px"><span><span style="display:inline-block;width:10px;height:10px;background:var(--pink);border-radius:2px;vertical-align:-1px"></span> Einnahmen (netto)</span><span><span style="display:inline-block;width:10px;height:10px;background:var(--amber);border-radius:2px;vertical-align:-1px"></span> Ausgaben (netto)</span></div>
     <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto"><line x1="${pad}" y1="${H-pad}" x2="${W-2}" y2="${H-pad}" stroke="var(--border)"></line>${bars}</svg>
-    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px"><span>Aktueller Monat: <b style="color:var(--text)">${fmt(months[months.length-1].ein)}</b> Einnahmen</span><span>Ø/Monat: ${fmt(months.reduce((a,b)=>a+b.ein,0)/months.length)}</span></div>`;
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px"><span>Einnahmen gesamt: <b style="color:var(--text)">${fmt(sumE)}</b></span><span>Ausgaben: <b>${fmt(sumA)}</b></span><span>Ø/Monat: ${fmt(sumE/months.length)}</span></div>`;
+}
+function chartKunden(rows){
+  const map={};
+  rows.forEach(r=>{ if(r.typ!=='Forderung') return; const d=parseD(r.datum||r.faellig); if(!d) return; const now=new Date(); let ok;
+    if(dashChart.range==='jahr') ok=d.getFullYear()===now.getFullYear(); else { const cut=new Date(now.getFullYear(),now.getMonth()-(dashChart.range-1),1); ok=d>=cut; }
+    if(!ok) return; const key=r.kundeId||r.partner||'?'; const net=(Number(r.betrag)||0)-ustOf(r); if(!map[key]) map[key]={name:r.partner||'?',kundeId:r.kundeId,sum:0}; map[key].sum+=net; });
+  const list=Object.values(map).sort((a,b)=>b.sum-a.sum).slice(0,8);
+  if(!list.length) return '<div class="empty"><i class="ti ti-users"></i>Keine Einnahmen im gewählten Zeitraum.</div>';
+  const max=Math.max(1,...list.map(x=>x.sum));
+  return '<div style="display:flex;flex-direction:column;gap:8px">'+list.map(x=>`<div class="${x.kundeId?'kbar':''}" ${x.kundeId?`data-cust="${x.kundeId}"`:''} style="cursor:${x.kundeId?'pointer':'default'}">
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:2px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.name)}</span><b>${fmt(x.sum)}</b></div>
+    <div style="background:var(--surface);border-radius:6px;height:14px;overflow:hidden"><div style="width:${Math.max(3,x.sum/max*100)}%;height:100%;background:var(--pink);border-radius:6px"></div></div></div>`).join('')+'</div><p class="hint" style="margin-top:10px">Top-Kunden nach Einnahmen (netto) im Zeitraum. Klick auf einen Kunden öffnet die Kundenakte.</p>';
 }
 function renderTodoList(el,list){
   if(!list.length){ document.getElementById(el).innerHTML=emptyState('Keine Aufgaben.','ti-checklist'); return; }
@@ -2643,6 +2685,12 @@ function parseInvoiceText(t){
   const parts=s.dataset.dstat.split('|'); dashFilter[parts[0]]=parts[1]; renderDash();
 }));
 document.getElementById('kontoBox').addEventListener('click',e=>{ const k=e.target.closest('[data-konto]'); if(k) showKontoDetail(k.dataset.konto); });
+document.getElementById('umsatzChart').addEventListener('click',e=>{
+  const m=e.target.closest('[data-cmode]'); if(m){ dashChart.mode=m.dataset.cmode; renderUmsatzChart(); return; }
+  const r=e.target.closest('[data-crange]'); if(r){ dashChart.range=(r.dataset.crange==='jahr'?'jahr':+r.dataset.crange); renderUmsatzChart(); return; }
+  const c=e.target.closest('[data-cust]'); if(c){ go('crm'); openCustomer(c.dataset.cust); return; }
+});
+document.getElementById('umsatzChart').addEventListener('change',e=>{ if(e.target.id==='chartPaid'){ dashChart.paidOnly=e.target.checked; renderUmsatzChart(); } });
 document.getElementById('kontoDetailClose').onclick=()=>document.getElementById('kontoDetailModal').classList.remove('open');
 document.getElementById('kontoDetailModal').addEventListener('click',e=>{ if(e.target.id==='kontoDetailModal') e.currentTarget.classList.remove('open'); });
 document.getElementById('dashForderungen').addEventListener('click',e=>{ const c=e.target.closest('[data-cust]'); if(c) openCustomer(c.dataset.cust); });
