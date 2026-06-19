@@ -107,6 +107,12 @@
   .ev .evd{width:6px; height:6px; border-radius:50%; flex-shrink:0;}
   .ev.red{background:var(--red-bg); color:var(--red);} .ev.amber{background:var(--amber-bg); color:var(--amber);} .ev.pink{background:var(--pink-tint); color:var(--pink-dark);}
   .ev.gray{background:var(--gray-bg); color:var(--gray);} .ev.green{background:var(--green-bg); color:var(--green);}
+  .cal .day{cursor:pointer;}
+  .cal.daylist{display:block;}
+  .cal.weekview .day{min-height:120px;}
+  .ev{cursor:pointer;}
+  .dayrow{display:flex; align-items:center; gap:10px; padding:11px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; cursor:pointer;}
+  .dayrow:hover{background:var(--surface);}
   .prio-dot{display:inline-block; width:9px; height:9px; border-radius:50%; flex-shrink:0;}
   .prio-Hoch{background:var(--red);} .prio-Mittel{background:var(--amber);} .prio-Niedrig{background:var(--gray);}
   .modal-overlay{position:fixed; inset:0; background:rgba(0,0,0,.4); display:none; align-items:center; justify-content:center; z-index:50; padding:20px;}
@@ -301,13 +307,18 @@
 
       <section class="view" id="view-kalender">
         <div class="card">
-          <div class="cal-head" style="justify-content:space-between">
+          <div class="cal-head" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
             <div style="display:flex;align-items:center;gap:14px">
               <i class="ti ti-chevron-left nav-btn" id="calPrev"></i>
-              <h3 id="calTitle" style="margin:0; font-size:15px;"></h3>
+              <h3 id="calTitle" style="margin:0; font-size:15px; min-width:150px; text-align:center"></h3>
               <i class="ti ti-chevron-right nav-btn" id="calNext"></i>
             </div>
-            <input id="calSearch" placeholder="Kalender durchsuchen (Stichwort, Teilnehmer…)" style="flex:1;max-width:340px;padding:8px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+            <div class="tabs" id="calModeTabs" style="margin:0">
+              <button class="active" data-mode="monat">Monat</button>
+              <button data-mode="woche">Woche</button>
+              <button data-mode="tag">Tag</button>
+            </div>
+            <input id="calSearch" placeholder="Suchen (Stichwort, Teilnehmer…)" style="flex:1;min-width:160px;max-width:300px;padding:8px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px">
           </div>
           <div id="calInvites"></div>
           <div id="calHits"></div>
@@ -409,6 +420,17 @@
     <div class="modal-actions">
       <button type="button" class="btn ghost" style="color:var(--text)" id="modalCancel">Abbrechen</button>
       <button type="button" class="btn" id="modalSave">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Termin-Info / RSVP -->
+<div class="modal-overlay" id="eventModal" style="z-index:70">
+  <div class="modal">
+    <div id="eventBody"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" style="color:var(--red)" id="eventDelete"><i class="ti ti-trash"></i></button>
+      <button type="button" class="btn ghost" style="color:var(--text)" id="eventClose">Schließen</button>
     </div>
   </div>
 </div>
@@ -922,37 +944,63 @@ let calY=today.getFullYear(), calM=today.getMonth();
 const MN=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 const prioCls={Hoch:'red',Mittel:'amber',Niedrig:'gray'};
 function calSearchTerm(){ const el=document.getElementById('calSearch'); return (el&&el.value||'').trim().toLowerCase(); }
+let calMode='monat', calRef=new Date(today);
+const DOWS=['Mo','Di','Mi','Do','Fr','Sa','So'];
+function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function sameDay(dstr,d){ const x=parseD(dstr); return !!x && x.getFullYear()===d.getFullYear()&&x.getMonth()===d.getMonth()&&x.getDate()===d.getDate(); }
+function isToday(d){ return d.getFullYear()===today.getFullYear()&&d.getMonth()===today.getMonth()&&d.getDate()===today.getDate(); }
+function taskOccursOn(a,d){ const start=parseD(a.faellig); if(!start) return false; const dd=new Date(d); dd.setHours(0,0,0,0); if(dd<start) return false; const rep=a.wiederholung;
+  if(!rep||rep==='Keine') return dd.getTime()===start.getTime();
+  if(rep==='Täglich') return true;
+  if(rep==='Wöchentlich') return dd.getDay()===start.getDay();
+  if(rep==='Monatlich') return dd.getDate()===start.getDate();
+  if(rep==='Jährlich') return dd.getDate()===start.getDate()&&dd.getMonth()===start.getMonth();
+  return false; }
+function eventsForDate(d){
+  const q=calSearchTerm(); const ev=[];
+  store.rechnungen.forEach(r=>{ if(r.faellig&&!['Bezahlt','Storniert'].includes(r.status)&&sameDay(r.faellig,d)){ const dd=daysTo(r.faellig); ev.push({type:'rechnung',id:r.id,label:(r.nr||r.partner||'Rechnung'),cls:dd<0?'red':'amber',search:r.partner||''}); }});
+  store.termine.forEach(t=>{ if(sameDay(t.datum,d)) ev.push({type:'termin',id:t.id,label:t.titel||'Termin',cls:'pink',search:(t.teilnehmer||'')+' '+(t.typ||'')}); });
+  store.aufgaben.forEach(a=>{ if(!a.faellig||a.done) return; if(taskOccursOn(a,d)) ev.push({type:'aufgabe',id:a.id,label:a.text||'Aufgabe',cls:prioCls[a.prio]||'gray',search:assigneeName(a.zugewiesen_id)}); });
+  return q? ev.filter(e=>((e.label||'')+' '+(e.search||'')).toLowerCase().includes(q)) : ev;
+}
+function evSpan(e){ return `<span class="ev ${e.cls}" data-evtype="${e.type}" data-evid="${e.id}" title="${esc(e.label)}"><span class="evd" style="background:currentColor"></span><span class="evt">${esc(e.label)}</span></span>`; }
+function setCalMode(m){ calMode=m; document.querySelectorAll('#calModeTabs button').forEach(b=>b.classList.toggle('active', b.dataset.mode===m)); renderCal(); }
+function startOfWeek(d){ const x=new Date(d); const off=(x.getDay()+6)%7; x.setDate(x.getDate()-off); x.setHours(0,0,0,0); return x; }
 function renderCal(){
+  const grid=document.getElementById('calGrid'); grid.classList.remove('daylist','weekview');
+  if(calMode==='woche') renderWeek(grid);
+  else if(calMode==='tag') renderDay(grid);
+  else renderMonth(grid);
+  renderCalHits(calSearchTerm());
+}
+function renderMonth(grid){
+  calY=calRef.getFullYear(); calM=calRef.getMonth();
   document.getElementById('calTitle').textContent=MN[calM]+' '+calY;
-  const q=calSearchTerm();
-  const dows=['Mo','Di','Mi','Do','Fr','Sa','So'];
-  let h=dows.map(d=>`<div class="dow">${d}</div>`).join('');
+  let h=DOWS.map(d=>`<div class="dow">${d}</div>`).join('');
   const first=new Date(calY,calM,1).getDay(); const offset=(first+6)%7; const days=new Date(calY,calM+1,0).getDate();
-  const evMap={};
-  const add=(dstr,label,cls,search)=>{ if(q && !(label+' '+(search||'')).toLowerCase().includes(q)) return; const d=parseD(dstr); if(d&&d.getFullYear()===calY&&d.getMonth()===calM){ (evMap[d.getDate()]=evMap[d.getDate()]||[]).push({label,cls}); }};
-  store.rechnungen.forEach(r=>{ if(r.faellig&&!['Bezahlt','Storniert'].includes(r.status)){ const dd=daysTo(r.faellig); add(r.faellig,(r.nr||r.partner||'Rechnung'),dd<0?'red':'amber',r.partner); }});
-  store.termine.forEach(t=>add(t.datum,t.titel||'Termin','pink',(t.teilnehmer||'')+' '+(t.typ||'')));
-  store.aufgaben.forEach(a=>{
-    if(!a.faellig||a.done) return;
-    const start=parseD(a.faellig); if(!start) return;
-    const pers=assigneeName(a.zugewiesen_id); const cls=prioCls[a.prio]||'gray';
-    if(q && !((a.text||'')+' '+(pers||'')).toLowerCase().includes(q)) return;
-    const rep=a.wiederholung;
-    for(let d=1; d<=days; d++){
-      const cur=new Date(calY,calM,d); if(cur<start) continue;
-      let hit=false;
-      if(!rep||rep==='Keine') hit=cur.getTime()===start.getTime();
-      else if(rep==='Täglich') hit=true;
-      else if(rep==='Wöchentlich') hit=cur.getDay()===start.getDay();
-      else if(rep==='Monatlich') hit=cur.getDate()===start.getDate();
-      else if(rep==='Jährlich') hit=cur.getDate()===start.getDate()&&cur.getMonth()===start.getMonth();
-      if(hit){ (evMap[d]=evMap[d]||[]).push({label:a.text||'Aufgabe', cls}); }
-    }
-  });
   for(let i=0;i<offset;i++) h+='<div class="day empty"></div>';
-  for(let d=1;d<=days;d++){ const evs=(evMap[d]||[]).map(e=>`<span class="ev ${e.cls}" title="${esc(e.label)}"><span class="evd" style="background:currentColor"></span><span class="evt">${esc(e.label)}</span></span>`).join(''); const t=(calY===today.getFullYear()&&calM===today.getMonth()&&d===today.getDate())?'today':''; h+=`<div class="day ${t}"><span class="n">${d}</span>${evs}</div>`; }
-  document.getElementById('calGrid').innerHTML=h;
-  renderCalHits(q);
+  for(let d=1;d<=days;d++){ const dt=new Date(calY,calM,d); h+=`<div class="day ${isToday(dt)?'today':''}" data-day="${ymd(dt)}"><span class="n">${d}</span>${eventsForDate(dt).map(evSpan).join('')}</div>`; }
+  grid.innerHTML=h;
+}
+function renderWeek(grid){
+  grid.classList.add('weekview');
+  const start=startOfWeek(calRef); const end=new Date(start); end.setDate(end.getDate()+6);
+  const f=x=>String(x.getDate()).padStart(2,'0')+'.'+String(x.getMonth()+1).padStart(2,'0')+'.';
+  document.getElementById('calTitle').textContent='Woche '+f(start)+'–'+f(end);
+  let h=DOWS.map(d=>`<div class="dow">${d}</div>`).join('');
+  for(let i=0;i<7;i++){ const dt=new Date(start); dt.setDate(start.getDate()+i); h+=`<div class="day ${isToday(dt)?'today':''}" data-day="${ymd(dt)}"><span class="n">${dt.getDate()}.${dt.getMonth()+1}.</span>${eventsForDate(dt).map(evSpan).join('')}</div>`; }
+  grid.innerHTML=h;
+}
+function renderDay(grid){
+  grid.classList.add('daylist');
+  const d=new Date(calRef);
+  const wd=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'][d.getDay()];
+  document.getElementById('calTitle').textContent=wd+', '+fmtD(ymd(d));
+  const evs=eventsForDate(d);
+  const tl={rechnung:'Rechnung',termin:'Termin',aufgabe:'Aufgabe'};
+  grid.innerHTML = evs.length
+    ? evs.map(e=>`<div class="dayrow" data-evtype="${e.type}" data-evid="${e.id}"><span class="grow">${esc(e.label)}</span><span class="pill ${e.cls}" style="font-size:11px">${tl[e.type]}</span></div>`).join('')
+    : '<div class="empty"><i class="ti ti-calendar"></i>Keine Einträge an diesem Tag.</div>';
 }
 function renderCalHits(q){
   const el=document.getElementById('calHits'); if(!el) return;
@@ -1241,8 +1289,34 @@ document.addEventListener('click',e=>{
     document.getElementById('pdfBtn').style.display=isBeleg?'none':'';
     if(!isBeleg) document.getElementById('primaryAction').innerHTML='<i class="ti ti-plus"></i> '+(tab.dataset.tab==='Verbindlichkeit'?'Neue Eingangsrechnung':'Neue Rechnung'); }
 });
-document.getElementById('calPrev').onclick=()=>{ calM--; if(calM<0){calM=11;calY--;} renderCal(); };
-document.getElementById('calNext').onclick=()=>{ calM++; if(calM>11){calM=0;calY++;} renderCal(); };
+function calShift(dir){ if(calMode==='monat') calRef.setMonth(calRef.getMonth()+dir); else if(calMode==='woche') calRef.setDate(calRef.getDate()+7*dir); else calRef.setDate(calRef.getDate()+dir); renderCal(); }
+document.getElementById('calPrev').onclick=()=>calShift(-1);
+document.getElementById('calNext').onclick=()=>calShift(1);
+document.getElementById('calModeTabs').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) setCalMode(b.dataset.mode); });
+document.getElementById('calGrid').addEventListener('click',e=>{
+  const ev=e.target.closest('[data-evtype]'); if(ev){ openEventInfo(ev.dataset.evtype, ev.dataset.evid); return; }
+  const day=e.target.closest('[data-day]'); if(day){ const d=parseD(day.dataset.day); if(d){ calRef=d; setCalMode('tag'); } }
+});
+function openEventInfo(type,id){
+  if(type==='termin'){ openTerminInfo(id); return; }
+  if(type==='aufgabe'){ openForm('aufgaben', id); return; }
+  if(type==='rechnung'){ const r=store.rechnungen.find(x=>x.id===id); if(!r) return; if(r.typ==='Forderung') openInvoice(id); else openForm('verbindlichkeiten', id); }
+}
+let eventTermId=null;
+function openTerminInfo(id){
+  const t=store.termine.find(x=>x.id===id); if(!t) return; eventTermId=id;
+  const parts=store.teilnahme.filter(x=>x.termin_id===id);
+  const plist = parts.length ? parts.map(p=>{ const prof=store.profiles.find(u=>u.id===p.user_id); const st=p.status||'Eingeladen'; const pill=st==='Zugesagt'?'<span class="pill green">Zugesagt</span>':st==='Abgesagt'?'<span class="pill red">Abgesagt</span>':'<span class="pill amber">Offen</span>'; return `<div class="row"><span class="grow">${esc(prof?(prof.name||prof.email||'?'):'?')}</span>${pill}</div>`; }).join('') : '<div class="hint">Keine Teilnehmer.</div>';
+  const mine=parts.find(p=>p.user_id===MY_ID);
+  const rsvp = mine ? `<div style="display:flex;gap:8px;margin-top:12px"><button class="btn ghost" style="color:var(--green)" data-rsvp="${mine.id}|Zugesagt">Zusagen</button><button class="btn ghost" style="color:var(--red)" data-rsvp="${mine.id}|Abgesagt">Absagen</button></div>` : '';
+  document.getElementById('eventBody').innerHTML=`<h3 style="margin:0 0 4px">${esc(t.titel||'Termin')}</h3><div class="hint" style="margin:0 0 12px">${fmtD(t.datum)} · ${esc(t.typ||'Termin')}</div><div style="font-weight:600;font-size:13px;margin-bottom:6px">Teilnehmer</div>${plist}${rsvp}`;
+  document.getElementById('eventDelete').style.display=(myRole()==='admin')?'':'none';
+  document.getElementById('eventModal').classList.add('open');
+}
+document.getElementById('eventClose').onclick=()=>document.getElementById('eventModal').classList.remove('open');
+document.getElementById('eventModal').addEventListener('click',e=>{ if(e.target.id==='eventModal') e.currentTarget.classList.remove('open'); });
+document.getElementById('eventBody').addEventListener('click',async e=>{ const b=e.target.closest('[data-rsvp]'); if(!b) return; const parts=b.dataset.rsvp.split('|'); const {data,error}=await sb.from('termin_teilnahme').update({status:parts[1]}).eq('id',parts[0]).select().single(); if(error){ alert('Fehler: '+(error.message||error)); return; } const i=store.teilnahme.findIndex(t=>t.id===parts[0]); if(i>=0) store.teilnahme[i]=data; openTerminInfo(eventTermId); renderInvites(); });
+document.getElementById('eventDelete').onclick=async ()=>{ if(!eventTermId||!confirm('Termin löschen?')) return; const {error}=await sb.from('termine').delete().eq('id',eventTermId); if(error){ alert('Fehler: '+(error.message||error)); return; } store.termine=store.termine.filter(t=>t.id!==eventTermId); store.teilnahme=store.teilnahme.filter(t=>t.termin_id!==eventTermId); document.getElementById('eventModal').classList.remove('open'); renderCal(); renderInvites(); };
 document.getElementById('calSearch').oninput=renderCal;
 ['todoSearch','todoPrio','todoAssignee','todoZeit'].forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener(id==='todoSearch'?'input':'change', renderTodoView); });
 const finRefresh=()=>renderFin(document.querySelector('#finTabs button.active').dataset.tab);
@@ -1251,7 +1325,7 @@ document.getElementById('finStatus').addEventListener('change', finRefresh);
 document.getElementById('liefSearch').addEventListener('input', renderLief);
 document.getElementById('liefKat').addEventListener('change', renderLief);
 document.getElementById('todoScope').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b){ document.querySelectorAll('#todoScope button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); renderTodoView(); } });
-document.getElementById('calHits').addEventListener('click',e=>{ const j=e.target.closest('[data-caljump]'); if(j){ const d=parseD(j.dataset.caljump); if(d){ calY=d.getFullYear(); calM=d.getMonth(); renderCal(); } } });
+document.getElementById('calHits').addEventListener('click',e=>{ const j=e.target.closest('[data-caljump]'); if(j){ const d=parseD(j.dataset.caljump); if(d){ calRef=d; setCalMode('tag'); } } });
 
 /* ---------- Export / Import ---------- */
 function exportData(){ const b=new Blob([JSON.stringify(store,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='internes-system-daten.json'; a.click(); }
@@ -1366,14 +1440,16 @@ async function deleteZugang(id){ const {error}=await sb.from('zugaenge').delete(
 
 /* ---------- Termin mit Teilnehmern ---------- */
 function openTermin(){
-  const checks=store.profiles.length
-    ? store.profiles.map(p=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 0;cursor:pointer"><input type="checkbox" class="t-part" value="${p.id}"> ${esc(p.name||p.email||'?')}${p.id===MY_ID?' (ich)':''}</label>`).join('')
-    : '<div class="hint">Noch keine Nutzer/Konten vorhanden.</div>';
+  const partRow=p=>`<label style="display:flex;align-items:center;gap:10px;font-size:13px;padding:7px 4px;cursor:pointer;border-top:1px solid var(--border)"><input type="checkbox" class="t-part" value="${p.id}" style="width:16px;height:16px;margin:0;flex-shrink:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name||p.email||'?')}${p.id===MY_ID?' (ich)':''}</span></label>`;
+  const checks=store.profiles.length ? store.profiles.map(partRow).join('') : '<div class="hint" style="padding:8px 4px">Noch keine Nutzer/Konten vorhanden.</div>';
+  const allRow=store.profiles.length?`<label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;padding:7px 4px;cursor:pointer"><input type="checkbox" id="t-all" style="width:16px;height:16px;margin:0;flex-shrink:0"><span>Alle auswählen</span></label>`:'';
   document.getElementById('terminBody').innerHTML=`
     <div class="field"><label>Titel</label><input id="t-titel" placeholder="z. B. Team-Meeting"></div>
-    <div class="field half"><label>Datum</label><input id="t-datum" type="date" value="${todayStr}"></div>
-    <div class="field half"><label>Typ</label><select id="t-typ"><option>Termin</option><option>Frist</option><option>Erinnerung</option></select></div>
-    <div class="field"><label>Teilnehmer (bekommen eine Erinnerung im Postfach)</label><div style="max-height:190px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px 10px">${store.profiles.length?`<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;padding:5px 0;border-bottom:1px solid var(--border);margin-bottom:4px;cursor:pointer"><input type="checkbox" id="t-all"> Alle auswählen</label>`:''}${checks}</div></div>`;
+    <div style="display:flex;gap:10px;margin-bottom:13px">
+      <div style="flex:1"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px">Datum</label><input id="t-datum" type="date" value="${todayStr}" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px"></div>
+      <div style="flex:1"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px">Typ</label><select id="t-typ" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px"><option>Termin</option><option>Frist</option><option>Erinnerung</option></select></div>
+    </div>
+    <div class="field"><label>Teilnehmer (bekommen eine Erinnerung im Postfach)</label><div style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:4px 10px">${allRow}${checks}</div></div>`;
   const all=document.getElementById('t-all'); if(all) all.onchange=()=>document.querySelectorAll('.t-part').forEach(c=>{ c.checked=all.checked; });
   document.getElementById('terminModal').classList.add('open');
 }
