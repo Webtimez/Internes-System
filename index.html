@@ -654,6 +654,7 @@ const SCHEMAS = {
     {k:'ustSatz', l:'USt-Satz (%)', t:'number', ph:'optional, z. B. 19', half:true},
     {k:'status', l:'Status', t:'select', o:['Offen','Teilbezahlt','Bezahlt'], half:true},
     {k:'beschreibung', l:'Notiz', t:'textarea', ph:'Gib 2 Werte an (z. B. Brutto + USt-Betrag) – der Rest wird berechnet.'},
+    {k:'beleg', l:'Rechnung / Beleg anhängen (PDF oder Bild)', t:'file'},
   ]},
 };
 
@@ -781,7 +782,7 @@ function renderFin(typ){
   data.forEach(r=>{
     const acts = typ==='Forderung'
       ? `<i class="ti ti-eye iconbtn" data-inv="${r.id}" title="Rechnung ansehen"></i><i class="ti ti-mail iconbtn" data-mail="${r.id}" title="An Kunde senden"></i><i class="ti ti-edit iconbtn" data-genedit="${r.id}"></i><i class="ti ti-trash iconbtn" data-del="rechnungen" data-id="${r.id}"></i>`
-      : `<i class="ti ti-edit iconbtn" data-edit="verbindlichkeiten" data-id="${r.id}"></i><i class="ti ti-trash iconbtn" data-del="rechnungen" data-id="${r.id}"></i>`;
+      : `${r.beleg_name?`<i class="ti ti-paperclip iconbtn" data-inlinedl="${r.id}" title="Angehängte Rechnung/Beleg: ${esc(r.beleg_name)}"></i>`:''}<i class="ti ti-edit iconbtn" data-edit="verbindlichkeiten" data-id="${r.id}"></i><i class="ti ti-trash iconbtn" data-del="rechnungen" data-id="${r.id}"></i>`;
     h+=`<tr><td>${esc(r.nr)||'–'}</td><td>${esc(r.partner)||'–'}</td><td>${fmtD(r.datum)}</td><td>${fmtD(r.faellig)}</td><td class="num">${fmt(r.betrag)}</td><td>${invPill(r)}</td><td class="act">${acts}</td></tr>`;
   });
   el.innerHTML=h+'</tbody></table>';
@@ -1068,6 +1069,10 @@ function openForm(schemaKey, id, preset){
   document.getElementById('modalForm').innerHTML=sc.fields.map(f=>{
     const v=rec[f.k]!=null?esc(rec[f.k]):'';
     let input;
+    if(f.t==='file'){
+      const cur=rec.beleg_name?`<div class="hint" style="margin:0 0 6px"><i class="ti ti-paperclip" style="vertical-align:-2px"></i> Aktuell angehängt: ${esc(rec.beleg_name)} – neue Datei wählen zum Ersetzen.</div>`:'';
+      return `<div class="field"><label>${f.l}</label>${cur}<input type="file" id="modal-file-${f.k}" accept="application/pdf,image/*"></div>`;
+    }
     if(f.t==='participants'){
       const sel=String(rec[f.k]||'').split(',').map(s=>s.trim()).filter(Boolean);
       const rows=store.profiles.length
@@ -1099,6 +1104,8 @@ document.getElementById('modalSave').onclick=async ()=>{
   const sc=SCHEMAS[formSchema]; if(sc.preset) Object.assign(obj, sc.preset);
   const partField=sc.fields.find(f=>f.t==='participants');
   if(partField) obj[partField.k]=[...document.querySelectorAll('#modalForm .f-part:checked')].map(c=>c.value).join(',');
+  const fileField=sc.fields.find(f=>f.t==='file');
+  if(fileField){ delete obj[fileField.k]; const fi=document.getElementById('modal-file-'+fileField.k); if(fi&&fi.files&&fi.files[0]){ obj.beleg=await fileToDataUrl(fi.files[0]); obj.beleg_name=fi.files[0].name; } }
   if(formEntity==='rechnungen'){
     if(formSchema==='verbindlichkeiten') obj.typ='Verbindlichkeit';
     const d=deriveAmounts(obj);
