@@ -1373,7 +1373,8 @@ function openTermin(){
     <div class="field"><label>Titel</label><input id="t-titel" placeholder="z. B. Team-Meeting"></div>
     <div class="field half"><label>Datum</label><input id="t-datum" type="date" value="${todayStr}"></div>
     <div class="field half"><label>Typ</label><select id="t-typ"><option>Termin</option><option>Frist</option><option>Erinnerung</option></select></div>
-    <div class="field"><label>Teilnehmer (bekommen eine Erinnerung im Postfach)</label><div style="max-height:170px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px 10px">${checks}</div></div>`;
+    <div class="field"><label>Teilnehmer (bekommen eine Erinnerung im Postfach)</label><div style="max-height:190px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px 10px">${store.profiles.length?`<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;padding:5px 0;border-bottom:1px solid var(--border);margin-bottom:4px;cursor:pointer"><input type="checkbox" id="t-all"> Alle auswählen</label>`:''}${checks}</div></div>`;
+  const all=document.getElementById('t-all'); if(all) all.onchange=()=>document.querySelectorAll('.t-part').forEach(c=>{ c.checked=all.checked; });
   document.getElementById('terminModal').classList.add('open');
 }
 document.getElementById('terminCancel').onclick=()=>document.getElementById('terminModal').classList.remove('open');
@@ -1649,6 +1650,7 @@ async function openConversation(peerId){
   th.innerHTML=(data||[]).map(m=>`<div class="bubble ${m.von===MY_ID?'me':'them'}">${esc(m.text||'')}<div class="t">${new Date(m.created_at).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div></div>`).join('')||'<div class="hint">Noch keine Nachrichten. Schreib die erste!</div>';
   th.scrollTop=th.scrollHeight;
   try{ await sb.from('nachrichten').update({gelesen:true}).eq('an',MY_ID).eq('von',peerId).eq('gelesen',false); }catch(e){}
+  updateUnreadBadge();
 }
 async function sendMsg(){
   const inp=document.getElementById('msgInput'); const text=inp.value.trim(); if(!text||!MSG_PEER||!MY_ID) return;
