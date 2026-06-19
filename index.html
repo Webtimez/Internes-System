@@ -733,6 +733,10 @@ async function deleteBelegLib(id){
   const {error}=await sb.from('belege').delete().eq('id',id); if(error) throw error;
   store.belege=store.belege.filter(b=>b.id!==id);
 }
+async function moveBelegFile(id, art){
+  const {data,error}=await sb.from('belege').update({art}).eq('id',id).select('id,name,groesse,kunde_id,art,created_at').single();
+  if(error) throw error; const i=store.belege.findIndex(b=>b.id===id); if(i>=0) store.belege[i]=data; return data;
+}
 async function assignBeleg(rechnungId, belegId){
   const row=await dbUpdate('rechnungen', rechnungId, {beleg_id: belegId||null});
   const i=store.rechnungen.findIndex(r=>r.id===rechnungId); if(i>=0) store.rechnungen[i]=row;
@@ -758,8 +762,9 @@ function renderBelege(art){
   let list=store.belege.filter(b=> isR ? b.art==='Rechnung' : b.art!=='Rechnung');
   if(q) list=list.filter(b=>(b.name||'').toLowerCase().includes(q));
   if(!list.length){ el.innerHTML=head+emptyState(q?'Nichts gefunden.':(isR?'Noch keine Rechnungen hochgeladen.':'Noch keine Belege hochgeladen.'),'ti-folder'); return; }
+  const toArt=isR?'Beleg':'Rechnung'; const moveTitle=isR?'Zu Belegen verschieben':'Zu Rechnungen verschieben';
   let h=head+'<table><thead><tr><th>Dateiname</th><th>Kunde</th><th>Hochgeladen</th><th class="num">Größe</th><th class="act"></th></tr></thead><tbody>';
-  list.forEach(b=>{ const k=b.kunde_id?store.kunden.find(x=>x.id===b.kunde_id):null; h+=`<tr><td>${esc(b.name||'–')}</td><td>${k?esc(k.name||''):'<span style="color:var(--muted)">allgemein</span>'}</td><td>${fmtD(b.created_at)}</td><td class="num">${b.groesse?Math.round(b.groesse/1024)+' KB':'–'}</td><td class="act"><i class="ti ti-download iconbtn" data-libdl="${b.id}" title="Herunterladen"></i><i class="ti ti-trash iconbtn" data-libdel="${b.id}" title="Löschen"></i></td></tr>`; });
+  list.forEach(b=>{ const k=b.kunde_id?store.kunden.find(x=>x.id===b.kunde_id):null; h+=`<tr><td>${esc(b.name||'–')}</td><td>${k?esc(k.name||''):'<span style="color:var(--muted)">allgemein</span>'}</td><td>${fmtD(b.created_at)}</td><td class="num">${b.groesse?Math.round(b.groesse/1024)+' KB':'–'}</td><td class="act"><i class="ti ti-arrows-exchange iconbtn" data-libmove="${b.id}" data-to="${toArt}" title="${moveTitle}"></i><i class="ti ti-download iconbtn" data-libdl="${b.id}" title="Herunterladen"></i><i class="ti ti-trash iconbtn" data-libdel="${b.id}" title="Löschen"></i></td></tr>`; });
   el.innerHTML=h+'</tbody></table>';
 }
 function renderFin(typ){
@@ -1390,7 +1395,7 @@ function openCustomer(id){
   const invHtml = `${subHead('Forderungen an den Kunden','Der Kunde zahlt an uns','custUpFord')}${invTable(ford,'f')}${subHead('Verbindlichkeiten von dem Kunden','Wir zahlen an den Kunden','custUpVerb')}${invTable(verb,'v')}`;
   const docs=store.belege.filter(b=>b.kunde_id===k.id);
   const docListOf=(arr,leer)=> arr.length
-    ? '<div class="doclist">'+arr.map(b=>`<div class="row"><span class="grow">${esc(b.name||'Datei')}</span><span style="color:var(--muted);font-size:12px;margin:0 10px">${fmtD(b.created_at)}</span><i class="ti ti-download iconbtn" data-libdl="${b.id}"></i><i class="ti ti-trash iconbtn" data-libdel="${b.id}"></i></div>`).join('')+'</div>'
+    ? '<div class="doclist">'+arr.map(b=>{ const toArt=b.art==='Rechnung'?'Beleg':'Rechnung'; const mt=b.art==='Rechnung'?'Zu Belegen verschieben':'Zu Rechnungen verschieben'; return `<div class="row"><span class="grow">${esc(b.name||'Datei')}</span><span style="color:var(--muted);font-size:12px;margin:0 10px">${fmtD(b.created_at)}</span><i class="ti ti-arrows-exchange iconbtn" data-custmove="${b.id}" data-to="${toArt}" title="${mt}"></i><i class="ti ti-download iconbtn" data-libdl="${b.id}"></i><i class="ti ti-trash iconbtn" data-libdel="${b.id}"></i></div>`; }).join('')+'</div>'
     : `<div class="hint">${leer}</div>`;
   const docsRechnung=docs.filter(b=>b.art==='Rechnung');
   const docsBeleg=docs.filter(b=>b.art!=='Rechnung');
@@ -1431,6 +1436,7 @@ document.getElementById('custDelete').onclick=()=>{ if(confirm('Kunden löschen?
 document.getElementById('custBody').addEventListener('click',e=>{
   const v=e.target.closest('[data-inv]'); if(v){ document.getElementById('custModal').classList.remove('open'); openInvoice(v.dataset.inv); return; }
   const vb=e.target.closest('[data-vbedit]'); if(vb){ document.getElementById('custModal').classList.remove('open'); openForm('verbindlichkeiten', vb.dataset.vbedit); return; }
+  const cm=e.target.closest('[data-custmove]'); if(cm){ moveBelegFile(cm.dataset.custmove, cm.dataset.to).then(()=>openCustomer(currentCust)).catch(err=>alert('Verschieben fehlgeschlagen: '+(err.message||err))); return; }
   const dl=e.target.closest('[data-libdl]'); if(dl){ downloadLibBeleg(dl.dataset.libdl); return; }
   const del=e.target.closest('[data-libdel]'); if(del){ if(confirm('Dokument löschen?')) deleteBelegLib(del.dataset.libdel).then(()=>openCustomer(currentCust)).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); return; }
   if(e.target.closest('#custDocUpRechnung')){ pendingDocArt='Rechnung'; document.getElementById('custDocFile').click(); return; }
@@ -1706,6 +1712,7 @@ document.getElementById('ustOverview').addEventListener('change',e=>{ const s=e.
 function curAblageArt(){ return (document.querySelector('#finTabs button.active')||{}).dataset?.tab==='AblageRechnung'?'Rechnung':'Beleg'; }
 document.getElementById('finTable').addEventListener('click',e=>{
   if(e.target.closest('#belegUploadBtn')){ pendingLibArt=curAblageArt(); document.getElementById('belegFile').click(); return; }
+  const mv=e.target.closest('[data-libmove]'); if(mv){ moveBelegFile(mv.dataset.libmove, mv.dataset.to).then(()=>finRefresh()).catch(err=>alert('Verschieben fehlgeschlagen: '+(err.message||err))); return; }
   const idl=e.target.closest('[data-inlinedl]'); if(idl){ downloadInlineBeleg(idl.dataset.inlinedl); return; }
   const dl=e.target.closest('[data-libdl]'); if(dl) downloadLibBeleg(dl.dataset.libdl);
   const del=e.target.closest('[data-libdel]'); if(del){ if(confirm('Datei löschen?')) deleteBelegLib(del.dataset.libdel).then(()=>finRefresh()).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); }
