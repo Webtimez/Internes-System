@@ -261,6 +261,7 @@
       <a data-view="dashboard" class="active"><i class="ti ti-home"></i> Dashboard</a>
       <div class="navgroup">Finanzen</div>
       <a data-view="finanzen"><i class="ti ti-receipt"></i> Rechnungen</a>
+      <a data-view="email"><i class="ti ti-mail"></i> E-Mail</a>
       <div class="navgroup">Kontakte</div>
       <a data-view="crm"><i class="ti ti-users"></i> Kunden / CRM</a>
       <a data-view="lieferanten"><i class="ti ti-cloud"></i> Anbieter</a>
@@ -420,6 +421,30 @@
         </div>
       </section>
 
+      <section class="view" id="view-email">
+        <div class="card">
+          <div class="head"><h3><i class="ti ti-robot" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>Automatische Zahlungserinnerungen</h3></div>
+          <label style="display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer;margin-bottom:12px"><input type="checkbox" id="m-auto" style="width:18px;height:18px"> Automatische Erinnerungen aktivieren</label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div style="flex:1;min-width:170px"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px">Erste Erinnerung ab … Tagen überfällig</label><input id="m-ab" type="number" min="0" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px"></div>
+            <div style="flex:1;min-width:170px"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px">Danach erneut alle … Tage</label><input id="m-intervall" type="number" min="1" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px"></div>
+          </div>
+          <p class="hint" style="margin:10px 0 0">Der Prüflauf passiert automatisch jeden Morgen (ca. 8:00 Uhr). Pro Rechnung wird höchstens im eingestellten Intervall erinnert. <span class="link" id="m-runnow">Jetzt prüfen & senden</span></p>
+        </div>
+        <div class="card">
+          <div class="head"><h3><i class="ti ti-template" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>E-Mail-Vorlagen</h3></div>
+          <p class="hint" style="margin:0 0 12px">Platzhalter werden automatisch ersetzt: <code>{nr}</code> Rechnungsnummer, <code>{betrag}</code>, <code>{faellig}</code> Fälligkeit, <code>{tage}</code> Tage überfällig, <code>{kunde}</code>, <code>{firma}</code>.</p>
+          <h4 style="font-size:13px;margin:0 0 6px">Rechnungs-E-Mail</h4>
+          <div class="field"><label>Betreff</label><input id="m-rbetreff" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px"></div>
+          <div class="field"><label>Text</label><textarea id="m-rtext" rows="6" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-family:inherit"></textarea></div>
+          <h4 style="font-size:13px;margin:16px 0 6px">Zahlungserinnerung</h4>
+          <div class="field"><label>Betreff</label><input id="m-mbetreff" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px"></div>
+          <div class="field"><label>Text</label><textarea id="m-mtext" rows="6" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-family:inherit"></textarea></div>
+          <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:6px"><button class="btn" id="m-save"><i class="ti ti-device-floppy"></i> Speichern</button></div>
+        </div>
+        <p class="hint">Versand läuft über euer IONOS-Postfach (team@webtimez.com). Beim Senden einer Rechnung oder Erinnerung öffnet sich zuerst ein Editor, in dem du die E-Mail anpassen kannst, bevor sie rausgeht.</p>
+      </section>
+
       <section class="view" id="view-einstellungen">
         <div class="hubgrid">
           <div class="hubcard">
@@ -506,6 +531,21 @@
     <div class="modal-actions">
       <button type="button" class="btn ghost" style="color:var(--text)" id="terminCancel">Abbrechen</button>
       <button type="button" class="btn" id="terminSave">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- E-Mail verfassen -->
+<div class="modal-overlay" id="emailModal" style="z-index:74">
+  <div class="modal">
+    <h3 id="emailTitle">E-Mail senden</h3>
+    <div class="field"><label>An</label><input id="em-to" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px"></div>
+    <div class="field"><label>Betreff</label><input id="em-subject" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px"></div>
+    <div class="field"><label>Nachricht</label><textarea id="em-body" rows="10" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-family:inherit"></textarea></div>
+    <div id="em-attach" class="hint" style="margin:0 0 6px;display:none"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" style="color:var(--text)" id="emailCancel">Abbrechen</button>
+      <button type="button" class="btn" id="emailSend"><i class="ti ti-send"></i> Senden</button>
     </div>
   </div>
 </div>
@@ -1454,44 +1494,97 @@ async function invoicePdfBase64(r){
   } finally { document.body.removeChild(wrap); }
 }
 function mailtoFallback(email,subj,body){ window.location.href=`mailto:${email}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`; }
+function mailCfg(){
+  const m=(store.settings&&store.settings.mail)||{};
+  return {
+    autoMahnung: m.autoMahnung!==false,
+    abTagen: (m.abTagen!=null?m.abTagen:1),
+    intervallTage: (m.intervallTage!=null?m.intervallTage:7),
+    rBetreff: m.rBetreff||'Rechnung {nr} – {firma}',
+    rText: m.rText||'Sehr geehrte Damen und Herren,\n\nanbei erhalten Sie unsere Rechnung {nr} über {betrag}.\nWir bitten um Begleichung bis zum {faellig}.\n\nMit freundlichen Grüßen\n{firma}',
+    mBetreff: m.mBetreff||'Zahlungserinnerung – Rechnung {nr}',
+    mText: m.mText||'Sehr geehrte Damen und Herren,\n\nunsere Rechnung {nr} über {betrag} war am {faellig} fällig und ist nach unseren Unterlagen noch offen ({tage} Tage überfällig).\nWir bitten um zeitnahe Begleichung. Sollte sich Ihre Zahlung überschnitten haben, betrachten Sie diese Erinnerung als gegenstandslos.\n\nMit freundlichen Grüßen\n{firma}'
+  };
+}
+function fillTpl(t,r,k){
+  const s=store.settings||{}; const d=daysTo(r.faellig); const tage=(d!=null&&d<0)?(-d):0;
+  return (t||'').replace(/\{nr\}/g,r.nr||'').replace(/\{betrag\}/g,fmt(r.betrag)).replace(/\{faellig\}/g,fmtD(r.faellig)).replace(/\{tage\}/g,String(tage)).replace(/\{kunde\}/g,(k&&k.name)||'').replace(/\{firma\}/g,s.firmenname||'Webtimez');
+}
+let emailOnSent=null, emailAttachments=[];
+function openEmailCompose(opts){
+  document.getElementById('emailTitle').textContent=opts.title||'E-Mail senden';
+  document.getElementById('em-to').value=opts.to||'';
+  document.getElementById('em-subject').value=opts.subject||'';
+  document.getElementById('em-body').value=opts.body||'';
+  emailAttachments=opts.attachments||[]; emailOnSent=opts.onSent||null;
+  const at=document.getElementById('em-attach');
+  if(emailAttachments.length){ at.style.display='block'; at.innerHTML='<i class="ti ti-paperclip" style="vertical-align:-2px"></i> Anhang: '+emailAttachments.map(a=>esc(a.filename)).join(', '); }
+  else { at.style.display='none'; at.innerHTML=''; }
+  document.getElementById('emailModal').classList.add('open');
+}
+document.getElementById('emailCancel').onclick=()=>document.getElementById('emailModal').classList.remove('open');
+document.getElementById('emailSend').onclick=async ()=>{
+  const to=document.getElementById('em-to').value.trim();
+  const subject=document.getElementById('em-subject').value.trim();
+  const text=document.getElementById('em-body').value;
+  if(!to||!subject){ alert('Empfänger und Betreff dürfen nicht leer sein.'); return; }
+  const btn=document.getElementById('emailSend'); const orig=btn.innerHTML; btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> Sendet…';
+  try{
+    const {data,error}=await sb.functions.invoke('send-email',{ body:{ to, subject, text, html:text.replace(/\n/g,'<br>'), replyTo:(store.settings&&store.settings.email)||undefined, attachments:emailAttachments } });
+    if(error||(data&&data.error)) throw new Error((data&&data.error)||(error&&error.message)||'Unbekannter Fehler');
+    document.getElementById('emailModal').classList.remove('open');
+    if(emailOnSent){ try{ await emailOnSent(); }catch(_){} }
+    alert('E-Mail an '+to+' gesendet.');
+  }catch(e){
+    if(confirm('Automatischer Versand nicht möglich:\n'+(e.message||e)+'\n\n(In Supabase muss das Secret SMTP_PASS gesetzt sein.)\n\nStattdessen im E-Mail-Programm öffnen?')){ mailtoFallback(to,subject,text); document.getElementById('emailModal').classList.remove('open'); }
+  } finally { btn.disabled=false; btn.innerHTML=orig; }
+};
 async function sendInvoice(id){
   const r=store.rechnungen.find(x=>x.id===id); if(!r) return;
   const k=store.kunden.find(x=>x.id===r.kundeId)||{};
   if(!k.email){ alert('Für diesen Kunden ist keine E-Mail hinterlegt. Bitte im CRM ergänzen.'); return; }
-  const s=store.settings||{};
-  const subj='Rechnung '+(r.nr||'')+(s.firmenname?' – '+s.firmenname:'');
-  const bodyText=`Sehr geehrte Damen und Herren,\n\nanbei erhalten Sie unsere Rechnung ${r.nr||''} über ${fmt(r.betrag)}.\nWir bitten um Begleichung bis zum ${fmtD(r.faellig)}.\n\nMit freundlichen Grüßen\n${s.firmenname||''}`;
-  const html=bodyText.replace(/\n/g,'<br>');
-  try{
-    let attachments=[];
-    try{ const b64=await invoicePdfBase64(r); if(b64) attachments=[{filename:'Rechnung-'+(r.nr||'')+'.pdf',content:b64,contentType:'application/pdf'}]; }catch(_){}
-    const {data,error}=await sb.functions.invoke('send-email',{ body:{ to:k.email, subject:subj, text:bodyText, html, replyTo:s.email||undefined, attachments } });
-    if(error||(data&&data.error)) throw new Error((data&&data.error)||(error&&error.message)||'Unbekannter Fehler');
-    if(r.status==='Offen'||r.status==='Entwurf'){ r.status='Versendet'; await dbUpdate('rechnungen',r.id,{status:'Versendet'}).catch(()=>{}); }
-    renderAll();
-    alert('Rechnung wurde per E-Mail an '+k.email+' gesendet'+(attachments.length?' (mit PDF).':' .'));
-  }catch(e){
-    if(confirm('Automatischer Versand nicht möglich:\n'+(e.message||e)+'\n\n(Tipp: In Supabase muss das Secret SMTP_PASS gesetzt sein.)\n\nStattdessen jetzt im E-Mail-Programm öffnen?')) mailtoFallback(k.email,subj,bodyText);
-  }
+  const c=mailCfg();
+  let attachments=[];
+  try{ const b64=await invoicePdfBase64(r); if(b64) attachments=[{filename:'Rechnung-'+(r.nr||'')+'.pdf',content:b64,contentType:'application/pdf'}]; }catch(_){}
+  openEmailCompose({ title:'Rechnung senden', to:k.email, subject:fillTpl(c.rBetreff,r,k), body:fillTpl(c.rText,r,k), attachments,
+    onSent: async ()=>{ if(r.status==='Offen'||r.status==='Entwurf'){ r.status='Versendet'; await dbUpdate('rechnungen',r.id,{status:'Versendet'}).catch(()=>{}); renderAll(); } } });
 }
 async function sendReminder(id){
   const r=store.rechnungen.find(x=>x.id===id); if(!r) return;
   const k=store.kunden.find(x=>x.id===r.kundeId)||{};
   if(!k.email){ alert('Für diesen Kunden ist keine E-Mail hinterlegt. Bitte im CRM ergänzen.'); return; }
-  if(!confirm(`Zahlungserinnerung für Rechnung ${r.nr||''} an ${k.name} (${k.email}) senden?`)) return;
-  const s=store.settings||{};
-  const d=daysTo(r.faellig); const seit=(d!==null&&d<0)?(' (seit '+(-d)+' Tagen überfällig)'):'';
-  const subj='Zahlungserinnerung – Rechnung '+(r.nr||'');
-  const bodyText=`Sehr geehrte Damen und Herren,\n\nunsere Rechnung ${r.nr||''} über ${fmt(r.betrag)} war am ${fmtD(r.faellig)} fällig und ist nach unseren Unterlagen noch offen${seit}.\nWir bitten um zeitnahe Begleichung. Sollte sich Ihre Zahlung überschnitten haben, betrachten Sie diese Erinnerung als gegenstandslos.\n\nMit freundlichen Grüßen\n${s.firmenname||''}`;
-  try{
-    const {data,error}=await sb.functions.invoke('send-email',{ body:{ to:k.email, subject:subj, text:bodyText, html:bodyText.replace(/\n/g,'<br>'), replyTo:s.email||undefined } });
-    if(error||(data&&data.error)) throw new Error((data&&data.error)||(error&&error.message)||'Unbekannter Fehler');
-    r.letzte_mahnung=new Date().toISOString().slice(0,10); await dbUpdate('rechnungen',r.id,{letzte_mahnung:r.letzte_mahnung}).catch(()=>{});
-    alert('Zahlungserinnerung an '+k.email+' gesendet.');
-  }catch(e){
-    if(confirm('Automatischer Versand nicht möglich:\n'+(e.message||e)+'\n\nStattdessen im E-Mail-Programm öffnen?')) mailtoFallback(k.email,subj,bodyText);
-  }
+  const c=mailCfg();
+  openEmailCompose({ title:'Zahlungserinnerung senden', to:k.email, subject:fillTpl(c.mBetreff,r,k), body:fillTpl(c.mText,r,k), attachments:[],
+    onSent: async ()=>{ r.letzte_mahnung=new Date().toISOString().slice(0,10); await dbUpdate('rechnungen',r.id,{letzte_mahnung:r.letzte_mahnung}).catch(()=>{}); renderAll(); } });
 }
+function renderEmailView(){
+  const c=mailCfg();
+  document.getElementById('m-auto').checked=c.autoMahnung;
+  document.getElementById('m-ab').value=c.abTagen;
+  document.getElementById('m-intervall').value=c.intervallTage;
+  document.getElementById('m-rbetreff').value=c.rBetreff;
+  document.getElementById('m-rtext').value=c.rText;
+  document.getElementById('m-mbetreff').value=c.mBetreff;
+  document.getElementById('m-mtext').value=c.mText;
+}
+document.getElementById('m-save').onclick=async ()=>{
+  store.settings.mail={
+    autoMahnung:document.getElementById('m-auto').checked,
+    abTagen:Math.max(0,Number(document.getElementById('m-ab').value)||0),
+    intervallTage:Math.max(1,Number(document.getElementById('m-intervall').value)||7),
+    rBetreff:document.getElementById('m-rbetreff').value,
+    rText:document.getElementById('m-rtext').value,
+    mBetreff:document.getElementById('m-mbetreff').value,
+    mText:document.getElementById('m-mtext').value
+  };
+  try{ await saveSettings(); const b=document.getElementById('m-save'); b.innerHTML='<i class="ti ti-check"></i> Gespeichert'; setTimeout(()=>b.innerHTML='<i class="ti ti-device-floppy"></i> Speichern',1500); }
+  catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
+};
+document.getElementById('m-runnow').onclick=async ()=>{
+  if(!confirm('Jetzt alle überfälligen Forderungen prüfen und Erinnerungen an die Kunden senden?')) return;
+  try{ const {data,error}=await sb.functions.invoke('daily-reminders',{ body:{ force:true } }); if(error||(data&&data.error)) throw new Error((data&&data.error)||(error&&error.message)); alert('Geprüft: '+(data.geprueft||0)+' überfällige Forderung(en) · gesendet: '+(data.sent||0)+' Erinnerung(en).'); }
+  catch(e){ alert('Fehler: '+(e.message||e)); }
+};
 document.getElementById('invSend').onclick=()=>sendInvoice(invId);
 
 let sendId=null;
@@ -1508,7 +1601,7 @@ document.getElementById('sendModal').addEventListener('click',e=>{ if(e.target.i
 document.getElementById('sendConfirm').onclick=()=>{ document.getElementById('sendModal').classList.remove('open'); sendInvoice(sendId); };
 
 /* ---------- Navigation ---------- */
-const titles={dashboard:'Dashboard',finanzen:'Finanzen',crm:'CRM / Kunden',lieferanten:'Anbieter',personal:'Personal',kalender:'Kalender',todo:'To-Do',nachrichten:'Nachrichten',einstellungen:'Einstellungen',intern:'Unternehmensinterne Daten'};
+const titles={dashboard:'Dashboard',finanzen:'Finanzen',email:'E-Mail',crm:'CRM / Kunden',lieferanten:'Anbieter',personal:'Personal',kalender:'Kalender',todo:'To-Do',nachrichten:'Nachrichten',einstellungen:'Einstellungen',intern:'Unternehmensinterne Daten'};
 let currentView='dashboard';
 function go(view){
   currentView=view;
@@ -1521,7 +1614,8 @@ function go(view){
   const map={crm:'Neuer Kunde',lieferanten:'Neuer Anbieter',personal:'Neue Person',todo:'Neue Aufgabe',kalender:'Neuer Termin'};
   if(view==='intern'){ const t=document.getElementById('internNotes'); if(t) t.value=(store.settings&&store.settings.interneNotizen)||''; }
   if(view==='nachrichten') renderNachrichten();
-  if(view==='dashboard'||view==='einstellungen'||view==='intern'||view==='nachrichten'){ pa.style.display='none'; return; }
+  if(view==='email') renderEmailView();
+  if(view==='dashboard'||view==='einstellungen'||view==='intern'||view==='nachrichten'||view==='email'){ pa.style.display='none'; return; }
   const finTab=view==='finanzen'?document.querySelector('#finTabs button.active').dataset.tab:null;
   const hideActions=finTab==='AblageRechnung'||finTab==='AblageBeleg';
   if(view==='finanzen'){ document.getElementById('pdfBtn').style.display=hideActions?'none':''; }
@@ -1547,7 +1641,7 @@ document.getElementById('primaryAction').onclick=primaryClick;
 document.addEventListener('click',e=>{
   const g=e.target.closest('[data-goto]'); if(g) go(g.dataset.goto);
   const inv=e.target.closest('[data-inv]'); if(inv) openInvoice(inv.dataset.inv);
-  const ml=e.target.closest('[data-mail]'); if(ml) openSend(ml.dataset.mail);
+  const ml=e.target.closest('[data-mail]'); if(ml) sendInvoice(ml.dataset.mail);
   const rm=e.target.closest('[data-remind]'); if(rm) sendReminder(rm.dataset.remind);
   const pd=e.target.closest('[data-paid]'); if(pd){ togglePaid(pd.dataset.paid); return; }
   const ge=e.target.closest('[data-genedit]'); if(ge) openGen(ge.dataset.genedit);
@@ -2222,7 +2316,7 @@ document.getElementById('calInvites').addEventListener('click',async e=>{
 function myRole(){ const p=store.profiles.find(x=>x.id===MY_ID); return (p&&p.rolle)||'admin'; }
 function applyRoleVisibility(){
   const admin=myRole()==='admin';
-  document.querySelectorAll('#nav a[data-view="finanzen"], #nav a[data-view="personal"]').forEach(a=>{ a.style.display=admin?'':'none'; });
+  document.querySelectorAll('#nav a[data-view="finanzen"], #nav a[data-view="personal"], #nav a[data-view="email"]').forEach(a=>{ a.style.display=admin?'':'none'; });
   const rc=document.getElementById('rolesCard'); if(rc) rc.style.display=admin?'':'none';
 }
 function renderRoles(){
