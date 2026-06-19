@@ -117,6 +117,10 @@
   .ev{cursor:pointer;}
   .dayrow{display:flex; align-items:center; gap:10px; padding:11px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; cursor:pointer;}
   .dayrow:hover{background:var(--surface);}
+  .part-lbl{display:flex; align-items:center; gap:10px; font-size:13px; padding:7px 4px; cursor:pointer; border-top:1px solid var(--border);}
+  .part-lbl:first-child{border-top:none;}
+  .part-lbl input{width:16px; height:16px; margin:0; flex-shrink:0;}
+  .part-lbl span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .prio-dot{display:inline-block; width:9px; height:9px; border-radius:50%; flex-shrink:0;}
   .prio-Hoch{background:var(--red);} .prio-Mittel{background:var(--amber);} .prio-Niedrig{background:var(--gray);}
   .modal-overlay{position:fixed; inset:0; background:rgba(0,0,0,.4); display:none; align-items:center; justify-content:center; z-index:50; padding:20px;}
@@ -617,7 +621,7 @@ const SCHEMAS = {
     {k:'faellig', l:'Fällig am (optional)', t:'date', half:true},
     {k:'prio', l:'Priorität', t:'select', o:['Hoch','Mittel','Niedrig'], half:true},
     {k:'wiederholung', l:'Wiederholung', t:'select', o:['Keine','Täglich','Wöchentlich','Monatlich','Jährlich'], half:true},
-    {k:'zugewiesen_id', l:'Zugewiesen an', t:'select', dyn:'profile', half:true},
+    {k:'zugewiesen_id', l:'Zugewiesen an (Teilnehmer – bekommen eine Erinnerung im Postfach)', t:'participants'},
   ]},
   termine:{ singular:'Termin', icon:'ti-calendar', fields:[
     {k:'titel', l:'Titel', t:'text', ph:'z. B. Steuertermin'},
@@ -861,7 +865,7 @@ function renderDash(){
     ? due.map(r=>`<div class="row"><span class="date">${fmtD(r.faellig)}</span><span class="grow">${r.typ==='Verbindlichkeit'?'↑ ':'↓ '}${esc(r.nr||'')} · ${esc(r.partner||'')}</span><span>${fmt(r.betrag)}</span></div>`).join('')
     : emptyState('Keine anstehenden Fälligkeiten.','ti-calendar');
   const pr={Hoch:0,Mittel:1,Niedrig:2};
-  const mine=store.aufgaben.filter(a=>!a.done && a.zugewiesen_id===MY_ID).sort((a,b)=>((pr[a.prio]??1)-(pr[b.prio]??1))||((parseD(a.faellig)||Infinity)-(parseD(b.faellig)||Infinity)));
+  const mine=store.aufgaben.filter(a=>!a.done && isAssignedTo(a,MY_ID)).sort((a,b)=>((pr[a.prio]??1)-(pr[b.prio]??1))||((parseD(a.faellig)||Infinity)-(parseD(b.faellig)||Infinity)));
   renderTodoList('todoMini', mine.slice(0,5));
   renderUst();
 }
@@ -869,13 +873,16 @@ function renderTodoList(el,list){
   if(!list.length){ document.getElementById(el).innerHTML=emptyState('Keine Aufgaben.','ti-checklist'); return; }
   const pc={Hoch:'red',Mittel:'amber',Niedrig:'gray'};
   document.getElementById(el).innerHTML=list.map(a=>{
-    const pn=assigneeName(a.zugewiesen_id);
+    const pn=assigneeNames(a);
     const rep=a.wiederholung&&a.wiederholung!=='Keine'?a.wiederholung:'';
     const meta=[pn?esc(pn):'', rep?('↻ '+rep):''].filter(Boolean).join(' · ');
     return `<div class="row ${a.done?'done':''}"><i class="ti ${a.done?'ti-square-check':'ti-square'} check" data-todo="${a.id}"></i><span class="prio-dot prio-${a.prio||'Mittel'}" title="Priorität: ${a.prio||'Mittel'}"></span><span class="grow">${esc(a.text)}${meta?`<br><span style="color:var(--muted);font-size:11px">${meta}</span>`:''}</span>${a.faellig?`<span class="pill ${pc[a.prio]||'gray'}">${fmtD(a.faellig)}</span>`:`<span class="pill gray" style="font-size:11px">ohne Datum</span>`}<i class="ti ti-edit iconbtn" data-edit="aufgaben" data-id="${a.id}"></i><i class="ti ti-trash iconbtn" data-del="aufgaben" data-id="${a.id}"></i></div>`;
   }).join('');
 }
 function assigneeName(id){ if(!id) return ''; const p=store.profiles.find(x=>x.id===id); if(p) return p.name||p.email||''; const pe=store.personal.find(x=>x.id===id); return pe?(pe.name||''):''; }
+function assigneeIds(a){ return String(a.zugewiesen_id||'').split(',').map(s=>s.trim()).filter(Boolean); }
+function isAssignedTo(a,id){ return assigneeIds(a).includes(id); }
+function assigneeNames(a){ return assigneeIds(a).map(assigneeName).filter(Boolean).join(', '); }
 function fillTodoAssignee(){ const sel=document.getElementById('todoAssignee'); if(!sel) return; const cur=sel.value; sel.innerHTML='<option value="">Alle Personen</option>'+store.profiles.map(p=>`<option value="${p.id}">${esc(p.name||p.email||'?')}</option>`).join(''); sel.value=cur; }
 function renderTodoView(){
   const q=(document.getElementById('todoSearch').value||'').toLowerCase();
@@ -885,10 +892,10 @@ function renderTodoView(){
   const scopeBtn=document.querySelector('#todoScope button.active'); const scope=scopeBtn?scopeBtn.dataset.scope:'mine';
   const prioRank={Hoch:0,Mittel:1,Niedrig:2};
   const list=store.aufgaben.filter(a=>{
-    if(scope==='mine' && a.zugewiesen_id!==MY_ID) return false;
-    if(q){ const pers=assigneeName(a.zugewiesen_id); if(!((a.text||'')+' '+pers).toLowerCase().includes(q)) return false; }
+    if(scope==='mine' && !isAssignedTo(a,MY_ID)) return false;
+    if(q){ const pers=assigneeNames(a); if(!((a.text||'')+' '+pers).toLowerCase().includes(q)) return false; }
     if(prio && a.prio!==prio) return false;
-    if(asg && a.zugewiesen_id!==asg) return false;
+    if(asg && !isAssignedTo(a,asg)) return false;
     const d=daysTo(a.faellig);
     if(zeit==='offen' && a.done) return false;
     if(zeit==='erledigt' && !a.done) return false;
@@ -964,7 +971,7 @@ function eventsForDate(d){
   const q=calSearchTerm(); const ev=[];
   store.rechnungen.forEach(r=>{ if(r.faellig&&!['Bezahlt','Storniert'].includes(r.status)&&sameDay(r.faellig,d)){ const dd=daysTo(r.faellig); ev.push({type:'rechnung',id:r.id,label:(r.nr||r.partner||'Rechnung'),cls:dd<0?'red':'amber',search:r.partner||''}); }});
   store.termine.forEach(t=>{ if(sameDay(t.datum,d)) ev.push({type:'termin',id:t.id,label:t.titel||'Termin',cls:'pink',search:(t.teilnehmer||'')+' '+(t.typ||'')}); });
-  store.aufgaben.forEach(a=>{ if(!a.faellig||a.done) return; if(taskOccursOn(a,d)) ev.push({type:'aufgabe',id:a.id,label:a.text||'Aufgabe',cls:prioCls[a.prio]||'gray',search:assigneeName(a.zugewiesen_id)}); });
+  store.aufgaben.forEach(a=>{ if(!a.faellig||a.done) return; if(taskOccursOn(a,d)) ev.push({type:'aufgabe',id:a.id,label:a.text||'Aufgabe',cls:prioCls[a.prio]||'gray',search:assigneeNames(a)}); });
   return q? ev.filter(e=>((e.label||'')+' '+(e.search||'')).toLowerCase().includes(q)) : ev;
 }
 function evSpan(e){ return `<span class="ev ${e.cls}" data-evtype="${e.type}" data-evid="${e.id}" title="${esc(e.label)}"><span class="evd" style="background:currentColor"></span><span class="evt">${esc(e.label)}</span></span>`; }
@@ -1011,7 +1018,7 @@ function renderCalHits(q){
   const hits=[];
   store.rechnungen.forEach(r=>{ if(r.faellig){ const s=((r.nr||'')+' '+(r.partner||'')).toLowerCase(); if(s.includes(q)) hits.push({date:r.faellig,label:(r.nr||'')+' · '+(r.partner||''),typ:'Rechnung'}); }});
   store.termine.forEach(t=>{ const s=((t.titel||'')+' '+(t.teilnehmer||'')+' '+(t.typ||'')).toLowerCase(); if(s.includes(q)) hits.push({date:t.datum,label:(t.titel||'Termin')+(t.teilnehmer?' ('+t.teilnehmer+')':''),typ:t.typ||'Termin'}); });
-  store.aufgaben.forEach(a=>{ if(!a.faellig) return; const pers=assigneeName(a.zugewiesen_id); const s=((a.text||'')+' '+(pers||'')).toLowerCase(); if(s.includes(q)) hits.push({date:a.faellig,label:a.text||'Aufgabe',typ:'Aufgabe'}); });
+  store.aufgaben.forEach(a=>{ if(!a.faellig) return; const pers=assigneeNames(a); const s=((a.text||'')+' '+(pers||'')).toLowerCase(); if(s.includes(q)) hits.push({date:a.faellig,label:a.text||'Aufgabe',typ:'Aufgabe'}); });
   hits.sort((a,b)=>(parseD(a.date)||0)-(parseD(b.date)||0));
   el.innerHTML = hits.length
     ? '<div class="card" style="margin-bottom:14px;padding:10px 14px"><div class="hint" style="margin:0 0 6px">'+hits.length+' Treffer (klicken zum Springen):</div>'+hits.map(x=>`<div class="row" style="cursor:pointer" data-caljump="${x.date}"><span class="date">${fmtD(x.date)}</span><span class="grow">${esc(x.label)}</span><span class="pill gray" style="font-size:11px">${esc(x.typ)}</span></div>`).join('')+'</div>'
@@ -1051,6 +1058,15 @@ function openForm(schemaKey, id, preset){
   document.getElementById('modalForm').innerHTML=sc.fields.map(f=>{
     const v=rec[f.k]!=null?esc(rec[f.k]):'';
     let input;
+    if(f.t==='participants'){
+      const sel=String(rec[f.k]||'').split(',').map(s=>s.trim()).filter(Boolean);
+      const rows=store.profiles.length
+        ? store.profiles.map(p=>`<label class="part-lbl"><input type="checkbox" class="f-part" value="${p.id}" ${sel.includes(p.id)?'checked':''}><span>${esc(p.name||p.email||'?')}${p.id===MY_ID?' (ich)':''}</span></label>`).join('')
+        : '<div class="hint" style="padding:8px 4px">Noch keine Konten vorhanden.</div>';
+      const allRow=store.profiles.length?`<label class="part-lbl" style="font-weight:500"><input type="checkbox" id="f-part-all"><span>Alle auswählen</span></label>`:'';
+      input=`<div style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:4px 10px">${allRow}${rows}</div>`;
+      return `<div class="field"><label>${f.l}</label>${input}</div>`;
+    }
     if(f.t==='select'){
       let optsHtml;
       if(f.dyn==='profile') optsHtml='<option value="">— niemand —</option>'+store.profiles.map(p=>`<option value="${p.id}" ${rec[f.k]===p.id?'selected':''}>${esc(p.name||p.email||'?')}</option>`).join('');
@@ -1062,6 +1078,7 @@ function openForm(schemaKey, id, preset){
     else input=`<input type="${f.t}" name="${f.k}" value="${v}" placeholder="${f.ph||''}" ${f.list?`list="${f.list}"`:''}>`;
     return `<div class="field ${f.half?'half':''}"><label>${f.l}</label>${input}</div>`;
   }).join('');
+  const pa=document.getElementById('f-part-all'); if(pa) pa.onchange=()=>document.querySelectorAll('#modalForm .f-part').forEach(c=>{ c.checked=pa.checked; });
   document.getElementById('modal').classList.add('open');
 }
 function closeForm(){ document.getElementById('modal').classList.remove('open'); }
@@ -1070,6 +1087,8 @@ document.getElementById('modalCancel').onclick=closeForm;
 document.getElementById('modalSave').onclick=async ()=>{
   const fd=new FormData(document.getElementById('modalForm')); const obj={}; fd.forEach((v,k)=>obj[k]=typeof v==='string'?v.trim():v);
   const sc=SCHEMAS[formSchema]; if(sc.preset) Object.assign(obj, sc.preset);
+  const partField=sc.fields.find(f=>f.t==='participants');
+  if(partField) obj[partField.k]=[...document.querySelectorAll('#modalForm .f-part:checked')].map(c=>c.value).join(',');
   if(formEntity==='rechnungen'){
     if(formSchema==='verbindlichkeiten') obj.typ='Verbindlichkeit';
     const d=deriveAmounts(obj);
@@ -1078,8 +1097,13 @@ document.getElementById('modalSave').onclick=async ()=>{
     if(formSchema==='rechnungimport' && !formId && pendingBeleg){ obj.beleg=pendingBeleg.data; obj.beleg_name=pendingBeleg.name; }
   }
   try{
-    if(formId){ const row=await dbUpdate(formEntity,formId,obj); const i=store[formEntity].findIndex(r=>r.id===formId); store[formEntity][i]=row; }
-    else { const row=await dbInsert(formEntity,obj); store[formEntity].push(row); }
+    let savedRow;
+    if(formId){ const row=await dbUpdate(formEntity,formId,obj); const i=store[formEntity].findIndex(r=>r.id===formId); store[formEntity][i]=row; savedRow=row; }
+    else { const row=await dbInsert(formEntity,obj); store[formEntity].push(row); savedRow=row; }
+    if(formEntity==='aufgaben' && partField){
+      const ids=String(savedRow.zugewiesen_id||'').split(',').map(s=>s.trim()).filter(Boolean).filter(uid=>uid!==MY_ID);
+      if(ids.length){ const msg=`Aufgabe zugewiesen: „${savedRow.text||''}"${savedRow.faellig?(' (fällig '+fmtD(savedRow.faellig)+')'):''}.`; try{ await sb.from('nachrichten').insert(ids.map(uid=>({von:MY_ID,an:uid,text:msg}))); updateUnreadBadge(); }catch(e){} }
+    }
     pendingBeleg=null; closeForm(); renderAll();
   }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
 };
@@ -1786,7 +1810,7 @@ async function dailyReminder(){
   if(!MY_ID) return;
   const today=new Date().toISOString().slice(0,10); const flag='reminder_'+MY_ID+'_'+today;
   try{ if(localStorage.getItem(flag)) return; }catch(e){}
-  const myTasks=store.aufgaben.filter(a=>!a.done && a.zugewiesen_id===MY_ID && a.faellig && daysTo(a.faellig)<=0);
+  const myTasks=store.aufgaben.filter(a=>!a.done && isAssignedTo(a,MY_ID) && a.faellig && daysTo(a.faellig)<=0);
   const dueInv=store.rechnungen.filter(r=>r.faellig && !['Bezahlt','Storniert'].includes(r.status) && daysTo(r.faellig)<=0);
   if(!myTasks.length && !dueInv.length){ try{localStorage.setItem(flag,'1');}catch(e){} return; }
   const text='Tagesüberblick '+fmtD(today)+': '+myTasks.length+' Aufgabe(n) fällig/überfällig'+(dueInv.length?(', '+dueInv.length+' Rechnung(en) fällig/überfällig'):'')+'.';
