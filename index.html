@@ -1042,8 +1042,9 @@ function renderKundenList(){ document.getElementById('kundenList').innerHTML=sto
 
 function zugRowHtml(z){
   const an=store.lieferanten.find(a=>a.id===z.anbieter_id); const href=z.url?(/^https?:/i.test(z.url)?z.url:'https://'+z.url):'';
+  const anbName=an?an.name:(z.anbieter_name||'');
   return `<div class="row" style="flex-wrap:wrap;gap:6px">
-    <span class="grow"><b>${esc(an?an.name:(z.bezeichnung||'Zugang'))}</b>${an&&z.bezeichnung?' · '+esc(z.bezeichnung):''}${z.benutzer?`<br><span style="color:var(--muted);font-size:12px">${esc(z.benutzer)}</span>`:''}</span>
+    <span class="grow"><b>${esc(anbName||z.bezeichnung||'Zugang')}</b>${anbName&&z.bezeichnung?' · '+esc(z.bezeichnung):''}${z.benutzer?`<br><span style="color:var(--muted);font-size:12px">${esc(z.benutzer)}</span>`:''}</span>
     ${href?`<a href="${esc(href)}" target="_blank" class="link" title="Öffnen"><i class="ti ti-external-link"></i></a>`:''}
     <span class="zpw" data-shown="0" style="font-family:monospace;font-size:12px;min-width:60px;text-align:right">••••••</span>
     <i class="ti ti-eye iconbtn" data-reveal="${z.id}" title="Passwort anzeigen"></i>
@@ -1403,8 +1404,8 @@ function openCustomer(id){
     : '<div class="hint">Noch keine Dokumente. Lade Rechnungen/Belege zu diesem Kunden hoch.</div>';
   const zug=store.zugaenge.filter(z=>z.kunde_id===k.id);
   const zugList=zug.length
-    ? zug.map(z=>{ const an=store.lieferanten.find(a=>a.id===z.anbieter_id); const href=z.url?(/^https?:/i.test(z.url)?z.url:'https://'+z.url):''; return `<div class="row" style="flex-wrap:wrap;gap:6px">
-        <span class="grow"><b>${esc(an?an.name:(z.bezeichnung||'Zugang'))}</b>${an&&z.bezeichnung?' · '+esc(z.bezeichnung):''}${z.benutzer?`<br><span style="color:var(--muted);font-size:12px">${esc(z.benutzer)}</span>`:''}</span>
+    ? zug.map(z=>{ const an=store.lieferanten.find(a=>a.id===z.anbieter_id); const anbName=an?an.name:(z.anbieter_name||''); const href=z.url?(/^https?:/i.test(z.url)?z.url:'https://'+z.url):''; return `<div class="row" style="flex-wrap:wrap;gap:6px">
+        <span class="grow"><b>${esc(anbName||z.bezeichnung||'Zugang')}</b>${anbName&&z.bezeichnung?' · '+esc(z.bezeichnung):''}${z.benutzer?`<br><span style="color:var(--muted);font-size:12px">${esc(z.benutzer)}</span>`:''}</span>
         ${href?`<a href="${esc(href)}" target="_blank" class="link" title="Öffnen"><i class="ti ti-external-link"></i></a>`:''}
         <span class="zpw" data-shown="0" style="font-family:monospace;font-size:12px;min-width:60px;text-align:right">••••••</span>
         <i class="ti ti-eye iconbtn" data-reveal="${z.id}" title="Passwort anzeigen"></i>
@@ -1451,22 +1452,26 @@ function openZugang(kundeId, id){
   zugKunde=kundeId; zugEditId=id||null;
   const z=id?store.zugaenge.find(x=>x.id===id):{};
   document.getElementById('zugTitle').textContent=id?'Zugang bearbeiten':'Zugang hinzufügen';
+  const curAnbName = z.anbieter_id ? ((store.lieferanten.find(a=>a.id===z.anbieter_id)||{}).name||'') : (z.anbieter_name||'');
   document.getElementById('zugBody').innerHTML=`
-    <div class="field"><label>Anbieter (aus eurer Anbieter-Liste)</label>
-      <select id="z-anbieter"><option value="">— keiner —</option>${store.lieferanten.map(a=>`<option value="${a.id}" ${z.anbieter_id===a.id?'selected':''}>${esc(a.name||'')}</option>`).join('')}</select></div>
+    <div class="field"><label>Anbieter (aus der Liste wählen oder neuen Namen eintippen)</label>
+      <input id="z-anbieter" list="z-anbieter-list" value="${esc(curAnbName)}" placeholder="z. B. Supabase – oder neuen Namen schreiben">
+      <datalist id="z-anbieter-list">${store.lieferanten.map(a=>`<option value="${esc(a.name||'')}"></option>`).join('')}</datalist></div>
     <div class="field"><label>Bezeichnung / Wofür</label><input id="z-bez" value="${esc(z.bezeichnung||'')}" placeholder="z. B. Hosting-Login, Domain, CMS"></div>
     <div class="field"><label>Web-/Login-Adresse</label><input id="z-url" value="${esc(z.url||'')}" placeholder="z. B. app.anbieter.com"></div>
     <div class="field half"><label>Benutzer / E-Mail</label><input id="z-user" value="${esc(z.benutzer||'')}" placeholder="login@…"></div>
     <div class="field half"><label>Passwort</label><div style="display:flex;gap:6px"><input id="z-pw" type="password" value="${esc(z.passwort||'')}" style="flex:1"><button type="button" class="btn ghost" style="color:var(--text)" id="z-pw-toggle" aria-label="anzeigen"><i class="ti ti-eye"></i></button></div></div>
     <div class="field"><label>Notiz</label><textarea id="z-notiz" placeholder="optional">${esc(z.notiz||'')}</textarea></div>`;
   const ab=document.getElementById('z-anbieter');
-  ab.onchange=()=>{ const a=store.lieferanten.find(x=>x.id===ab.value); const u=document.getElementById('z-url'); if(a&&a.url&&!u.value) u.value=a.url; };
+  ab.onchange=()=>{ const a=store.lieferanten.find(x=>(x.name||'').toLowerCase()===ab.value.trim().toLowerCase()); const u=document.getElementById('z-url'); if(a&&a.url&&!u.value) u.value=a.url; };
   document.getElementById('z-pw-toggle').onclick=()=>{ const i=document.getElementById('z-pw'); i.type=i.type==='password'?'text':'password'; };
   document.getElementById('zugModal').classList.add('open');
 }
 document.getElementById('zugCancel').onclick=()=>document.getElementById('zugModal').classList.remove('open');
 document.getElementById('zugSave').onclick=async ()=>{
-  const obj={ kunde_id:zugKunde, anbieter_id:document.getElementById('z-anbieter').value||null, bezeichnung:document.getElementById('z-bez').value.trim(), url:document.getElementById('z-url').value.trim(), benutzer:document.getElementById('z-user').value.trim(), passwort:document.getElementById('z-pw').value, notiz:document.getElementById('z-notiz').value.trim() };
+  const anbInput=document.getElementById('z-anbieter').value.trim();
+  const matched=store.lieferanten.find(a=>(a.name||'').toLowerCase()===anbInput.toLowerCase());
+  const obj={ kunde_id:zugKunde, anbieter_id:matched?matched.id:null, anbieter_name:(matched||!anbInput)?null:anbInput, bezeichnung:document.getElementById('z-bez').value.trim(), url:document.getElementById('z-url').value.trim(), benutzer:document.getElementById('z-user').value.trim(), passwort:document.getElementById('z-pw').value, notiz:document.getElementById('z-notiz').value.trim() };
   try{
     if(zugEditId){ const {data,error}=await sb.from('zugaenge').update(obj).eq('id',zugEditId).select().single(); if(error) throw error; const i=store.zugaenge.findIndex(x=>x.id===zugEditId); store.zugaenge[i]=data; }
     else { const {data,error}=await sb.from('zugaenge').insert(obj).select().single(); if(error) throw error; store.zugaenge.push(data); }
