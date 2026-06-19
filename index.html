@@ -173,6 +173,10 @@
   .bubble .sender{font-size:11px; font-weight:600; color:var(--pink-dark); margin-bottom:2px;}
   .msgback{display:none; cursor:pointer; margin-right:8px; vertical-align:-2px;}
   .msgedit{margin-left:8px; font-size:14px;}
+  .msgicon{color:var(--muted); cursor:pointer; font-size:18px; flex-shrink:0;}
+  .msgicon:hover{color:var(--pink-dark);}
+  .filechip{display:flex; align-items:center; gap:7px; background:rgba(0,0,0,.06); border-radius:8px; padding:8px 10px; margin:2px 0; font-size:13px; cursor:pointer; max-width:240px;}
+  .bubble.me .filechip{background:rgba(255,255,255,.22); color:#fff;}
   @media(max-width:760px){
     .sidebar{position:fixed; top:0; left:0; bottom:0; z-index:60; transform:translateX(-100%); transition:transform .2s; box-shadow:0 0 30px rgba(0,0,0,.15); width:80%; max-width:300px;}
     body.nav-open .sidebar{transform:translateX(0);}
@@ -403,7 +407,10 @@
           <div class="card" style="display:flex;flex-direction:column;min-height:420px">
             <div id="msgHeader" style="font-weight:600;font-size:15px;padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:10px">Wähle links eine Person</div>
             <div id="msgThread" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;max-height:420px"></div>
-            <div id="msgInputRow" style="display:none;gap:8px;margin-top:10px">
+            <div id="msgAttachPreview" style="display:none;align-items:center;gap:8px;margin-top:8px;padding:6px 10px;background:var(--surface);border-radius:8px;font-size:13px"></div>
+            <div id="msgInputRow" style="display:none;gap:8px;margin-top:10px;align-items:center">
+              <button class="btn ghost" id="msgAttachBtn" style="color:var(--text);padding:9px 11px" title="Datei anhängen"><i class="ti ti-paperclip"></i></button>
+              <input type="file" id="msgFile" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" style="display:none">
               <input id="msgInput" placeholder="Nachricht schreiben…" style="flex:1;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px">
               <button class="btn" id="msgSend"><i class="ti ti-send"></i></button>
             </div>
@@ -497,6 +504,28 @@
     <div class="modal-actions">
       <button type="button" class="btn ghost" style="color:var(--text)" id="terminCancel">Abbrechen</button>
       <button type="button" class="btn" id="terminSave">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Chat-Info (Medien & Suche) -->
+<div class="modal-overlay" id="chatInfoModal" style="z-index:72">
+  <div class="modal">
+    <h3 id="chatInfoTitle">Chat-Info</h3>
+    <div id="chatInfoBody"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" style="color:var(--text)" id="chatInfoClose">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bild-Lightbox -->
+<div class="modal-overlay" id="imgLightbox" style="z-index:80;background:rgba(0,0,0,.82)">
+  <div style="max-width:94vw;max-height:90vh;display:flex;flex-direction:column;align-items:center;gap:12px">
+    <img id="lightboxImg" src="" alt="" style="max-width:94vw;max-height:80vh;border-radius:10px">
+    <div style="display:flex;gap:10px">
+      <button class="btn" id="lightboxDl"><i class="ti ti-download"></i> Herunterladen</button>
+      <button class="btn ghost" style="color:#fff;border-color:rgba(255,255,255,.4);background:transparent" id="lightboxClose">Schließen</button>
     </div>
   </div>
 </div>
@@ -1889,7 +1918,42 @@ async function renderNachrichten(){
   el.innerHTML = selfEntry + groupHtml + peopleHtml;
   if(MSG_PEER) openConversation(MSG_PEER);
 }
+let currentThread=[], msgSearchTerm='', pendingMsgFile=null;
+function chatHeaderHtml(title, subtitle, isGroup){
+  const groupEdit=isGroup?`<i class="ti ti-settings msgicon" id="groupEdit" title="Gruppe verwalten"></i>`:'';
+  return `<div style="display:flex;align-items:center;gap:6px">
+      <span class="msgback" id="msgBack"><i class="ti ti-arrow-left"></i></span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</span>
+      <i class="ti ti-search msgicon" id="msgSearchBtn" title="In Unterhaltung suchen"></i>
+      <i class="ti ti-photo msgicon" id="msgMediaBtn" title="Medien & Dateien"></i>
+      ${groupEdit}
+    </div>
+    ${subtitle?`<div style="font-weight:400;font-size:12px;color:var(--muted);margin-top:2px">${subtitle}</div>`:''}
+    <div id="msgSearchRow" style="display:${msgSearchTerm?'block':'none'};margin-top:8px"><input id="msgSearchInput" value="${esc(msgSearchTerm)}" placeholder="In Unterhaltung suchen…" style="width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px"></div>`;
+}
+function attachHtml(m){
+  if(!m.anhang) return '';
+  const isImg=(m.anhang_typ||'').indexOf('image/')===0;
+  if(isImg) return `<img src="${m.anhang}" data-img="${m.id}" alt="${esc(m.anhang_name||'')}" style="max-width:220px;max-height:240px;border-radius:8px;display:block;margin:2px 0;cursor:pointer">`;
+  return `<div class="filechip" data-msgdl="${m.id}"><i class="ti ti-file-text"></i> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">${esc(m.anhang_name||'Datei')}</span><i class="ti ti-download" style="margin-left:auto"></i></div>`;
+}
+function bubbleHtml(m){
+  const sender=(isGroupPeer(MSG_PEER)&&m.von!==MY_ID)?`<div class="sender">${esc(assigneeName(m.von)||'?')}</div>`:'';
+  const att=attachHtml(m);
+  const txt=m.text?`<div>${esc(m.text)}</div>`:'';
+  return `<div class="bubble ${m.von===MY_ID?'me':'them'}">${sender}${att}${txt}<div class="t">${new Date(m.created_at).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div></div>`;
+}
+function renderThread(){
+  const th=document.getElementById('msgThread');
+  const q=msgSearchTerm.trim().toLowerCase();
+  let list=currentThread;
+  if(q) list=list.filter(m=>((m.text||'')+' '+(m.anhang_name||'')).toLowerCase().includes(q));
+  if(!list.length){ th.innerHTML=`<div class="hint">${q?'Keine Treffer in dieser Unterhaltung.':(isGroupPeer(MSG_PEER)?'Noch keine Nachrichten in dieser Gruppe.':'Noch keine Nachrichten. Schreib die erste!')}</div>`; return; }
+  th.innerHTML=list.map(bubbleHtml).join('');
+  if(!q) th.scrollTop=th.scrollHeight;
+}
 async function openConversation(peerId){
+  if(peerId!==MSG_PEER){ msgSearchTerm=''; }
   MSG_PEER=peerId;
   document.querySelectorAll('#msgPeople .msgp').forEach(x=>x.classList.toggle('active', x.dataset.peer===peerId));
   const th=document.getElementById('msgThread');
@@ -1898,36 +1962,86 @@ async function openConversation(peerId){
   if(isGroupPeer(peerId)){
     const gid=groupId(peerId); const g=store.gruppen.find(x=>x.id===gid)||{};
     const names=groupMembers(gid).map(assigneeName).filter(Boolean);
-    document.getElementById('msgHeader').innerHTML=`<span class="msgback" id="msgBack"><i class="ti ti-arrow-left"></i></span><i class="ti ti-users" style="vertical-align:-2px"></i> ${esc(g.name||'Gruppe')} <span class="msgedit link" id="groupEdit" title="Gruppe verwalten"><i class="ti ti-settings"></i></span><div style="font-weight:400;font-size:12px;color:var(--muted)">${names.length?esc(names.join(', ')):'Keine Mitglieder'}</div>`;
+    document.getElementById('msgHeader').innerHTML=chatHeaderHtml(`<i class="ti ti-users" style="vertical-align:-2px"></i> ${esc(g.name||'Gruppe')}`, names.length?esc(names.join(', ')):'Keine Mitglieder', true);
     const {data,error}=await sb.from('nachrichten').select('*').eq('gruppe_id',gid).order('created_at');
     if(error){ th.innerHTML='<div class="hint">Nachrichten konnten nicht geladen werden.</div>'; return; }
-    th.innerHTML=(data||[]).map(m=>`<div class="bubble ${m.von===MY_ID?'me':'them'}">${m.von!==MY_ID?`<div class="sender">${esc(assigneeName(m.von)||'?')}</div>`:''}${esc(m.text||'')}<div class="t">${new Date(m.created_at).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div></div>`).join('')||'<div class="hint">Noch keine Nachrichten in dieser Gruppe.</div>';
-    th.scrollTop=th.scrollHeight;
+    currentThread=data||[]; renderThread();
     try{ localStorage.setItem(groupReadKey(gid), new Date().toISOString()); }catch(e){}
     updateUnreadBadge();
     return;
   }
   const peer=store.profiles.find(p=>p.id===peerId)||{};
-  document.getElementById('msgHeader').innerHTML = `<span class="msgback" id="msgBack"><i class="ti ti-arrow-left"></i></span>`+(peerId===MY_ID ? 'Meine Notizen' : esc(peer.name||peer.email||'Chat'));
+  document.getElementById('msgHeader').innerHTML=chatHeaderHtml(peerId===MY_ID ? 'Meine Notizen' : esc(peer.name||peer.email||'Chat'), '', false);
   const {data,error}=await sb.from('nachrichten').select('*').or(`and(von.eq.${MY_ID},an.eq.${peerId}),and(von.eq.${peerId},an.eq.${MY_ID})`).order('created_at');
   if(error){ th.innerHTML='<div class="hint">Nachrichten konnten nicht geladen werden.</div>'; return; }
-  th.innerHTML=(data||[]).filter(m=>!m.gruppe_id).map(m=>`<div class="bubble ${m.von===MY_ID?'me':'them'}">${esc(m.text||'')}<div class="t">${new Date(m.created_at).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div></div>`).join('')||'<div class="hint">Noch keine Nachrichten. Schreib die erste!</div>';
-  th.scrollTop=th.scrollHeight;
+  currentThread=(data||[]).filter(m=>!m.gruppe_id); renderThread();
   try{ await sb.from('nachrichten').update({gelesen:true}).eq('an',MY_ID).eq('von',peerId).eq('gelesen',false); }catch(e){}
   updateUnreadBadge();
 }
+function setMsgAttach(file){
+  pendingMsgFile=file||null;
+  const pv=document.getElementById('msgAttachPreview');
+  if(file){ pv.style.display='flex'; pv.innerHTML=`<i class="ti ti-paperclip"></i><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(file.name)}</span><i class="ti ti-x iconbtn" id="msgAttachClear" title="Entfernen" style="margin:0"></i>`; }
+  else { pv.style.display='none'; pv.innerHTML=''; }
+}
 async function sendMsg(){
-  const inp=document.getElementById('msgInput'); const text=inp.value.trim(); if(!text||!MSG_PEER||!MY_ID) return;
-  inp.value='';
-  let row;
-  if(isGroupPeer(MSG_PEER)) row={von:MY_ID,an:null,gruppe_id:groupId(MSG_PEER),text};
-  else row={von:MY_ID,an:MSG_PEER,text};
+  const inp=document.getElementById('msgInput'); const text=inp.value.trim();
+  if((!text && !pendingMsgFile)||!MSG_PEER||!MY_ID) return;
+  const file=pendingMsgFile;
+  inp.value=''; setMsgAttach(null);
+  let row = isGroupPeer(MSG_PEER) ? {von:MY_ID,an:null,gruppe_id:groupId(MSG_PEER),text} : {von:MY_ID,an:MSG_PEER,text};
+  if(file){
+    try{
+      if(file.size>9*1024*1024){ alert('Datei ist zu groß (max. 9 MB).'); return; }
+      row.anhang=await fileToDataUrl(file); row.anhang_name=file.name; row.anhang_typ=file.type||'application/octet-stream';
+    }catch(e){ alert('Datei konnte nicht gelesen werden.'); return; }
+  }
   const {error}=await sb.from('nachrichten').insert(row);
   if(error){ alert('Senden fehlgeschlagen: '+(error.message||error)); return; }
   openConversation(MSG_PEER);
 }
+function openChatInfo(){
+  if(!MSG_PEER) return;
+  const isGroup=isGroupPeer(MSG_PEER);
+  let title='Medien & Dateien';
+  if(isGroup){ const g=store.gruppen.find(x=>x.id===groupId(MSG_PEER)); title=(g?g.name:'Gruppe')+' · Medien'; }
+  else if(MSG_PEER===MY_ID) title='Meine Notizen · Medien';
+  else { const p=store.profiles.find(x=>x.id===MSG_PEER); title=(p?(p.name||p.email):'Chat')+' · Medien'; }
+  document.getElementById('chatInfoTitle').textContent=title;
+  const withAtt=currentThread.filter(m=>m.anhang);
+  const imgs=withAtt.filter(m=>(m.anhang_typ||'').indexOf('image/')===0);
+  const files=withAtt.filter(m=>(m.anhang_typ||'').indexOf('image/')!==0);
+  const imgGrid=imgs.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px;margin-bottom:14px">${imgs.map(m=>`<img src="${m.anhang}" data-img="${m.id}" style="width:100%;height:84px;object-fit:cover;border-radius:8px;cursor:pointer">`).join('')}</div>`:'';
+  const fileList=files.length?`<div class="doclist">${files.map(m=>`<div class="row" data-msgdl="${m.id}" style="cursor:pointer"><i class="ti ti-file-text" style="color:var(--pink-dark)"></i><span class="grow">${esc(m.anhang_name||'Datei')}</span><span style="color:var(--muted);font-size:12px">${new Date(m.created_at).toLocaleDateString('de-DE')}</span><i class="ti ti-download iconbtn"></i></div>`).join('')}</div>`:'';
+  document.getElementById('chatInfoBody').innerHTML = (imgs.length||files.length)
+    ? `${imgs.length?`<h3 style="font-size:13px;margin:0 0 8px">Bilder (${imgs.length})</h3>${imgGrid}`:''}${files.length?`<h3 style="font-size:13px;margin:0 0 8px">Dateien (${files.length})</h3>${fileList}`:''}`
+    : '<div class="hint">In dieser Unterhaltung wurden noch keine Medien oder Dateien geteilt.</div>';
+  document.getElementById('chatInfoModal').classList.add('open');
+}
+function openImg(id){
+  const m=currentThread.find(x=>x.id===id); if(!m||!m.anhang) return;
+  document.getElementById('lightboxImg').src=m.anhang;
+  document.getElementById('lightboxDl').onclick=()=>triggerDownload(m.anhang, m.anhang_name||'bild');
+  document.getElementById('imgLightbox').classList.add('open');
+}
+function downloadMsgAtt(id){ const m=currentThread.find(x=>x.id===id); if(m&&m.anhang) triggerDownload(m.anhang, m.anhang_name||'datei'); }
 document.getElementById('msgPeople').addEventListener('click',e=>{ const p=e.target.closest('[data-peer]'); if(p) openConversation(p.dataset.peer); });
-document.getElementById('msgHeader').addEventListener('click',e=>{ if(e.target.closest('#msgBack')){ document.body.classList.remove('msg-open'); return; } if(e.target.closest('#groupEdit') && isGroupPeer(MSG_PEER)) openGroup(groupId(MSG_PEER)); });
+document.getElementById('msgThread').addEventListener('click',e=>{ const im=e.target.closest('[data-img]'); if(im){ openImg(im.dataset.img); return; } const dl=e.target.closest('[data-msgdl]'); if(dl) downloadMsgAtt(dl.dataset.msgdl); });
+document.getElementById('msgHeader').addEventListener('click',e=>{
+  if(e.target.closest('#msgBack')){ document.body.classList.remove('msg-open'); return; }
+  if(e.target.closest('#groupEdit') && isGroupPeer(MSG_PEER)){ openGroup(groupId(MSG_PEER)); return; }
+  if(e.target.closest('#msgMediaBtn')){ openChatInfo(); return; }
+  if(e.target.closest('#msgSearchBtn')){ const r=document.getElementById('msgSearchRow'); if(r){ const show=r.style.display==='none'; r.style.display=show?'block':'none'; if(show){ const si=document.getElementById('msgSearchInput'); if(si) si.focus(); } else { msgSearchTerm=''; renderThread(); } } return; }
+});
+document.getElementById('msgHeader').addEventListener('input',e=>{ if(e.target.id==='msgSearchInput'){ msgSearchTerm=e.target.value; renderThread(); } });
+document.getElementById('chatInfoBody').addEventListener('click',e=>{ const im=e.target.closest('[data-img]'); if(im){ openImg(im.dataset.img); return; } const dl=e.target.closest('[data-msgdl]'); if(dl) downloadMsgAtt(dl.dataset.msgdl); });
+document.getElementById('chatInfoClose').onclick=()=>document.getElementById('chatInfoModal').classList.remove('open');
+document.getElementById('chatInfoModal').addEventListener('click',e=>{ if(e.target.id==='chatInfoModal') e.currentTarget.classList.remove('open'); });
+document.getElementById('lightboxClose').onclick=()=>document.getElementById('imgLightbox').classList.remove('open');
+document.getElementById('imgLightbox').addEventListener('click',e=>{ if(e.target.id==='imgLightbox') e.currentTarget.classList.remove('open'); });
+document.getElementById('msgAttachBtn').onclick=()=>document.getElementById('msgFile').click();
+document.getElementById('msgFile').onchange=e=>{ const f=e.target.files[0]; if(f) setMsgAttach(f); e.target.value=''; };
+document.getElementById('msgAttachPreview').addEventListener('click',e=>{ if(e.target.closest('#msgAttachClear')) setMsgAttach(null); });
 document.getElementById('msgSend').onclick=sendMsg;
 document.getElementById('msgInput').addEventListener('keydown',e=>{ if(e.key==='Enter') sendMsg(); });
 document.getElementById('newGroupBtn').onclick=()=>openGroup(null);
