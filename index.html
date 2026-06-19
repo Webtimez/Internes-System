@@ -246,7 +246,22 @@
     <input id="authPw" type="password" autocomplete="current-password" style="width:100%;padding:10px 12px;border:1px solid #ECECEE;border-radius:8px;font-size:14px;margin:5px 0 6px">
     <div id="authErr" style="font-size:12px;color:#A32D2D;min-height:16px;margin-bottom:8px"></div>
     <button id="authBtn" style="width:100%;background:#FF5CE0;color:#fff;border:none;padding:11px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer">Anmelden</button>
-    <div style="text-align:center;margin-top:12px;font-size:13px;color:#6E6E73"><span id="authToggle" style="color:#9A0086;cursor:pointer">Neues Konto erstellen</span></div>
+    <div style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px;color:#6E6E73"><span id="authToggle" style="color:#9A0086;cursor:pointer">Neues Konto erstellen</span><span id="authForgot" style="color:#9A0086;cursor:pointer">Passwort vergessen?</span></div>
+    <div id="mfaBox" style="display:none;margin-top:14px;border-top:1px solid #ECECEE;padding-top:14px">
+      <label style="font-size:12px;color:#6E6E73">2-Faktor-Code (aus deiner Authenticator-App)</label>
+      <input id="mfaCode" inputmode="numeric" placeholder="6-stelliger Code" style="width:100%;padding:10px 12px;border:1px solid #ECECEE;border-radius:8px;font-size:14px;margin:5px 0 8px">
+      <button id="mfaBtn" style="width:100%;background:#FF5CE0;color:#fff;border:none;padding:11px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer">Bestätigen</button>
+    </div>
+  </div>
+</div>
+
+<div id="recoveryOverlay" style="display:none;position:fixed;inset:0;background:#F4F2F5;align-items:center;justify-content:center;z-index:101;padding:20px">
+  <div style="background:#fff;border:1px solid #ECECEE;border-radius:16px;padding:30px;width:360px;max-width:100%">
+    <div style="font-weight:600;font-size:16px;margin-bottom:6px">Neues Passwort festlegen</div>
+    <p style="font-size:13px;color:#6E6E73;margin:0 0 16px">Bitte gib dein neues Passwort ein.</p>
+    <input id="recPw" type="password" placeholder="Neues Passwort (min. 6 Zeichen)" style="width:100%;padding:10px 12px;border:1px solid #ECECEE;border-radius:8px;font-size:14px;margin-bottom:10px">
+    <div id="recErr" style="font-size:12px;color:#A32D2D;min-height:16px;margin-bottom:8px"></div>
+    <button id="recBtn" style="width:100%;background:#FF5CE0;color:#fff;border:none;padding:11px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer">Passwort speichern</button>
   </div>
 </div>
 
@@ -269,6 +284,7 @@
       <a data-view="personal"><i class="ti ti-id-badge-2"></i> Personal</a>
       <a data-view="kalender"><i class="ti ti-calendar"></i> Kalender</a>
       <a data-view="todo"><i class="ti ti-checklist"></i> To-Do</a>
+      <a data-view="zeit"><i class="ti ti-clock"></i> Zeiterfassung</a>
       <a data-view="nachrichten"><i class="ti ti-message-circle"></i> Nachrichten <span id="navUnread" class="unread" style="display:none;margin-left:auto"></span></a>
       <div class="navgroup">System</div>
       <a data-view="einstellungen"><i class="ti ti-settings"></i> Einstellungen</a>
@@ -282,6 +298,14 @@
         <h1 id="pageTitle">Dashboard</h1>
       </div>
       <div class="actions">
+        <div id="searchWrap" style="position:relative">
+          <input id="globalSearch" placeholder="Suchen…" autocomplete="off" style="width:180px;max-width:42vw;padding:8px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+          <div id="globalSearchResults" style="display:none;position:absolute;top:110%;right:0;width:320px;max-width:80vw;max-height:60vh;overflow:auto;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.12);z-index:40;padding:6px"></div>
+        </div>
+        <div id="notifWrap" style="position:relative">
+          <button class="btn ghost" id="notifBtn" style="color:var(--text);position:relative;padding:9px 11px"><i class="ti ti-bell"></i><span id="notifDot" class="unread" style="display:none;position:absolute;top:-5px;right:-5px;min-width:16px;text-align:center"></span></button>
+          <div id="notifPanel" style="display:none;position:absolute;top:115%;right:0;width:320px;max-width:80vw;max-height:60vh;overflow:auto;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.12);z-index:40;padding:6px"></div>
+        </div>
         <button class="btn ghost" id="templateBtn" style="color:var(--text)"><i class="ti ti-file-invoice"></i> Rechnungsvorlage</button>
         <input type="file" id="importFile" accept="application/json" style="display:none">
         <button class="btn" id="primaryAction"><i class="ti ti-plus"></i> Neue Rechnung</button>
@@ -297,6 +321,10 @@
         <div class="card" style="border-top:3px solid var(--pink)">
           <div class="head"><h3><i class="ti ti-wallet" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>Kontoübersicht</h3></div>
           <div id="kontoBox"></div>
+        </div>
+        <div class="card">
+          <div class="head"><h3><i class="ti ti-chart-bar" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>Umsatz der letzten Monate</h3></div>
+          <div id="umsatzChart"></div>
         </div>
         <div class="grid2">
           <div class="card" style="border-top:3px solid var(--green)">
@@ -331,12 +359,16 @@
           <div class="tabs" id="finTabs" style="margin:0">
             <button class="active" data-tab="Forderung">Forderungen (Ausgang)</button>
             <button data-tab="Verbindlichkeit">Verbindlichkeiten (Eingang)</button>
+            <button data-tab="Angebot">Angebote</button>
+            <button data-tab="Abos">Abos (wiederkehrend)</button>
+            <button data-tab="Kontoabgleich">Kontoabgleich</button>
             <button data-tab="AblageRechnung">Rechnungen-Ablage</button>
             <button data-tab="AblageBeleg">Belege-Ablage</button>
           </div>
           <button class="btn ghost" id="pdfBtn" style="color:var(--text)"><i class="ti ti-file-upload"></i> Rechnung hochladen (PDF/Bild)</button>
           <input type="file" id="pdfFile" accept="application/pdf,image/*" style="display:none">
           <input type="file" id="belegFile" accept="application/pdf,image/*" multiple style="display:none">
+          <input type="file" id="bankFile" accept=".csv,text/csv" style="display:none">
           <input type="file" id="custDocFile" accept="application/pdf,image/*" multiple style="display:none">
           <input type="file" id="custRechnungFile" accept="application/pdf,image/*" style="display:none">
         </div>
@@ -398,6 +430,17 @@
           <select id="todoZeit" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px"><option value="">Alle</option><option value="offen">Nur offene</option><option value="erledigt">Nur erledigte</option><option value="ueber">Überfällig</option><option value="heute">Heute</option><option value="woche">Diese Woche</option><option value="ohne">Ohne Datum</option></select>
         </div>
         <div class="card"><div id="todoFull"></div></div>
+      </section>
+
+      <section class="view" id="view-zeit">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+          <select id="zeitKunde" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px;min-width:160px"></select>
+          <input id="zeitProjekt" placeholder="Projekt / Stichwort…" style="flex:1;min-width:150px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+          <select id="zeitStatus" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px"><option value="offen">Nur offene</option><option value="abgerechnet">Abgerechnet</option><option value="">Alle</option></select>
+          <button class="btn" id="zeitNewBtn"><i class="ti ti-plus"></i> Zeit erfassen</button>
+        </div>
+        <div class="card" style="margin-bottom:14px"><div id="zeitSummary"></div></div>
+        <div class="card"><div id="zeitTable"></div></div>
       </section>
 
       <section class="view" id="view-nachrichten">
@@ -478,6 +521,24 @@
             <h3>Daten laden</h3>
             <p>Zuvor gesicherte Daten wieder einspielen.</p>
             <button class="btn ghost" style="color:var(--text)" id="impBtn2"><i class="ti ti-upload"></i> Importieren</button>
+          </div>
+          <div class="hubcard">
+            <div class="hi"><i class="ti ti-file-spreadsheet"></i></div>
+            <h3>Steuerberater-Export (CSV)</h3>
+            <p>Alle Rechnungen (Einnahmen & Ausgaben) als CSV für Excel oder den Steuerberater.</p>
+            <button class="btn ghost" style="color:var(--text)" id="csvExportBtn"><i class="ti ti-download"></i> CSV exportieren</button>
+          </div>
+          <div class="hubcard">
+            <div class="hi"><i class="ti ti-trash"></i></div>
+            <h3>Papierkorb</h3>
+            <p>Gelöschte Kunden, Rechnungen, Anbieter, Aufgaben usw. ansehen, wiederherstellen oder endgültig entfernen.</p>
+            <button class="btn ghost" style="color:var(--text)" id="trashBtn"><i class="ti ti-trash"></i> Öffnen</button>
+          </div>
+          <div class="hubcard">
+            <div class="hi"><i class="ti ti-shield-lock"></i></div>
+            <h3>Sicherheit · 2-Faktor</h3>
+            <p>Zusätzlichen Schutz per Authenticator-App (z. B. Google Authenticator) für dein Konto aktivieren.</p>
+            <button class="btn ghost" style="color:var(--text)" id="twofaBtn"><i class="ti ti-shield-lock"></i> 2-Faktor verwalten</button>
           </div>
           <div class="hubcard">
             <div class="hi"><i class="ti ti-database"></i></div>
@@ -703,12 +764,59 @@
   </div>
 </div>
 
+<!-- 2-Faktor -->
+<div class="modal-overlay" id="twofaModal" style="z-index:72">
+  <div class="modal">
+    <h3>2-Faktor-Authentifizierung</h3>
+    <div id="twofaBody"><div class="hint">Lädt…</div></div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" style="color:var(--text)" id="twofaClose">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Papierkorb -->
+<div class="modal-overlay" id="trashModal" style="z-index:72">
+  <div class="modal wide">
+    <h3>Papierkorb</h3>
+    <div id="trashBody"><div class="hint">Lädt…</div></div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" style="color:var(--text)" id="trashClose">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Zeiteintrag -->
+<div class="modal-overlay" id="zeitModal">
+  <div class="modal">
+    <h3 id="zeitTitle">Zeit erfassen</h3>
+    <div id="zeitBody"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" style="color:var(--text)" id="zeitCancel">Abbrechen</button>
+      <button type="button" class="btn" id="zeitSave">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Abo (wiederkehrende Rechnung) -->
+<div class="modal-overlay" id="aboModal">
+  <div class="modal">
+    <h3 id="aboTitle">Neues Abo</h3>
+    <div id="aboBody"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" style="color:var(--text)" id="aboCancel">Abbrechen</button>
+      <button type="button" class="btn" id="aboSave">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- Rechnungs-Vorschau -->
 <div class="modal-overlay" id="invModal">
   <div class="modal wide">
     <div style="display:flex; justify-content:flex-end; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
       <button type="button" class="btn ghost" style="color:var(--text)" id="invClose">Schließen</button>
       <button type="button" class="btn ghost" style="color:var(--text)" id="invPdf"><i class="ti ti-file-type-pdf"></i> Als PDF speichern</button>
+      <button type="button" class="btn ghost" style="color:var(--text)" id="invXml"><i class="ti ti-file-code"></i> XRechnung (XML)</button>
       <button type="button" class="btn" id="invSend"><i class="ti ti-mail"></i> An Kunde senden</button>
     </div>
     <div id="invContent"></div>
@@ -863,11 +971,13 @@ const SET_FIELDS=[
   {k:'bic', l:'BIC', ph:'optional', half:true},
   {k:'bank', l:'Bank', ph:'Name der Bank', half:true},
   {k:'ust', l:'USt-Satz Standard (%)', ph:'19', half:true},
+  {k:'stundensatz', l:'Stundensatz Standard (€)', ph:'z. B. 90', half:true},
+  {k:'kleinunternehmer', l:'Kleinunternehmer nach §19 UStG – keine Umsatzsteuer ausweisen', t:'check'},
   {k:'footer', l:'Fußzeile', ph:'z. B. Kleinunternehmer-Hinweis oder Danksagung', area:true},
 ];
 
 const KEY='webtimez_is_v2';
-let store = {rechnungen:[],kunden:[],lieferanten:[],personal:[],aufgaben:[],termine:[],belege:[],zugaenge:[],profiles:[],teilnahme:[],gruppen:[],gruppenMitglieder:[],emails:[],settings:{}};
+let store = {rechnungen:[],kunden:[],lieferanten:[],personal:[],aufgaben:[],termine:[],belege:[],zugaenge:[],profiles:[],teilnahme:[],gruppen:[],gruppenMitglieder:[],emails:[],abos:[],zeiten:[],settings:{}};
 const persist = () => { try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} };
 
 /* ---------- Supabase-Anbindung ---------- */
@@ -875,10 +985,10 @@ const SB_URL='https://lwqgylsyrarhgaxbrzvm.supabase.co';
 const SB_KEY='sb_publishable_ICakPCjSIwgKk3RBLQiixw_cSJgQnwc';
 const sb = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
 const TABLE={kunden:'kunden',rechnungen:'rechnungen',lieferanten:'anbieter',personal:'personal',aufgaben:'aufgaben',termine:'termine'};
-const SELECT={rechnungen:'id,typ,nr,partner,kunde_id,datum,faellig,leistung,netto,ust_satz,betrag,status,beschreibung,beleg_name,beleg_id,kategorie,letzte_mahnung,created_at'};
+const SELECT={rechnungen:'id,typ,nr,partner,kunde_id,datum,faellig,leistung,netto,ust_satz,betrag,status,beschreibung,beleg_name,beleg_id,kategorie,letzte_mahnung,leistungsdatum,created_at'};
 let pendingBeleg=null, pendingKategorie=null, pendingLibArt=null;
 const NUMF={kunden:['zahlungsziel'],rechnungen:['netto','ust_satz','betrag'],lieferanten:['kosten'],personal:['resturlaub']};
-const DATEF={rechnungen:['datum','faellig'],lieferanten:['naechste'],personal:['eintritt'],aufgaben:['faellig'],termine:['datum']};
+const DATEF={rechnungen:['datum','faellig','leistungsdatum'],lieferanten:['naechste'],personal:['eintritt'],aufgaben:['faellig'],termine:['datum']};
 function toDb(key,o){ const d={...o}; delete d.id; delete d.created_at;
   if(key==='rechnungen'){ d.kunde_id=d.kundeId||null; delete d.kundeId; if('ustSatz' in d){ d.ust_satz=d.ustSatz; delete d.ustSatz; } }
   (NUMF[key]||[]).forEach(f=>{ if(f in d) d[f]=(d[f]===''||d[f]==null)?null:Number(d[f]); });
@@ -889,10 +999,10 @@ function toDb(key,o){ const d={...o}; delete d.id; delete d.created_at;
 function fromDb(key,r){ const o={...r}; if(key==='rechnungen'){ o.kundeId=r.kunde_id; o.ustSatz=r.ust_satz; } return o; }
 async function dbInsert(key,o){ const {data,error}=await sb.from(TABLE[key]).insert(toDb(key,o)).select().single(); if(error) throw error; return fromDb(key,data); }
 async function dbUpdate(key,id,o){ const {data,error}=await sb.from(TABLE[key]).update(toDb(key,o)).eq('id',id).select().single(); if(error) throw error; return fromDb(key,data); }
-async function dbDelete(key,id){ const {error}=await sb.from(TABLE[key]).delete().eq('id',id); if(error) throw error; }
+async function dbDelete(key,id){ const {error}=await sb.from(TABLE[key]).update({geloescht:true}).eq('id',id); if(error) throw error; }
 async function saveSettings(){ if(sb) await sb.from('settings').upsert({id:1,data:store.settings}); }
 async function loadAll(){
-  for(const key of Object.keys(TABLE)){ const {data,error}=await sb.from(TABLE[key]).select(SELECT[key]||'*').order('created_at',{ascending:true}); if(!error&&data) store[key]=data.map(r=>fromDb(key,r)); }
+  for(const key of Object.keys(TABLE)){ const {data,error}=await sb.from(TABLE[key]).select(SELECT[key]||'*').eq('geloescht',false).order('created_at',{ascending:true}); if(!error&&data) store[key]=data.map(r=>fromDb(key,r)); }
   const {data:b}=await sb.from('belege').select('id,name,groesse,kunde_id,art,created_at').order('created_at',{ascending:false}); store.belege=b||[];
   const {data:z}=await sb.from('zugaenge').select('*').order('created_at',{ascending:true}); store.zugaenge=z||[];
   const {data:pf}=await sb.from('profiles').select('id,name,email,rolle').order('name'); store.profiles=pf||[];
@@ -900,6 +1010,8 @@ async function loadAll(){
   try{ const {data:gr}=await sb.from('gruppen').select('*').order('created_at'); store.gruppen=gr||[]; }catch(e){ store.gruppen=[]; }
   try{ const {data:gm}=await sb.from('gruppen_mitglieder').select('*'); store.gruppenMitglieder=gm||[]; }catch(e){ store.gruppenMitglieder=[]; }
   try{ const {data:em}=await sb.from('emails').select('*').order('created_at',{ascending:false}); store.emails=em||[]; }catch(e){ store.emails=[]; }
+  try{ const {data:ab}=await sb.from('abos').select('*').order('created_at'); store.abos=ab||[]; }catch(e){ store.abos=[]; }
+  try{ const {data:zt}=await sb.from('zeiten').select('*').order('datum',{ascending:false}); store.zeiten=zt||[]; }catch(e){ store.zeiten=[]; }
   try{ const {data:u}=await sb.auth.getUser(); MY_ID=u&&u.user?u.user.id:null; }catch(e){}
   const {data:s}=await sb.from('settings').select('data').eq('id',1).maybeSingle(); store.settings=(s&&s.data)||{};
   renderAll();
@@ -971,6 +1083,9 @@ function renderBelege(art){
 function renderFin(typ){
   if(typ==='AblageRechnung'){ renderBelege('Rechnung'); return; }
   if(typ==='AblageBeleg'){ renderBelege('Beleg'); return; }
+  if(typ==='Abos'){ renderAbos(); return; }
+  if(typ==='Angebot'){ renderAngebote(); return; }
+  if(typ==='Kontoabgleich'){ renderBankImport(); return; }
   const q=finQ(); const st=(document.getElementById('finStatus')||{}).value||'';
   let data = store.rechnungen.filter(r=>r.typ===typ);
   if(q) data=data.filter(r=>((r.nr||'')+' '+(r.partner||'')).toLowerCase().includes(q));
@@ -1154,7 +1269,25 @@ function renderDash(){
   const mine=store.aufgaben.filter(a=>!a.done && isAssignedTo(a,MY_ID)).sort((a,b)=>((pr[a.prio]??1)-(pr[b.prio]??1))||((parseD(a.faellig)||Infinity)-(parseD(b.faellig)||Infinity)));
   renderTodoList('todoMini', mine.slice(0,5));
   renderKonto();
+  renderUmsatzChart();
   renderUst();
+}
+function renderUmsatzChart(){
+  const el=document.getElementById('umsatzChart'); if(!el) return;
+  const months=[]; const now=new Date();
+  for(let i=5;i>=0;i--){ const d=new Date(now.getFullYear(),now.getMonth()-i,1); months.push({y:d.getFullYear(),m:d.getMonth(),label:['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'][d.getMonth()],ein:0,aus:0}); }
+  store.rechnungen.forEach(r=>{ if(r.status==='Storniert') return; const base=r.datum||r.faellig; const d=parseD(base); if(!d) return; const slot=months.find(x=>x.y===d.getFullYear()&&x.m===d.getMonth()); if(!slot) return; const net=(Number(r.betrag)||0)-ustOf(r); if(r.typ==='Forderung') slot.ein+=net; else slot.aus+=net; });
+  const max=Math.max(1,...months.map(x=>Math.max(x.ein,x.aus)));
+  const W=520,H=170,pad=28,bw=(W-pad*2)/months.length;
+  let bars='';
+  months.forEach((x,i)=>{ const cx=pad+i*bw; const eh=(x.ein/max)*(H-pad-20), ah=(x.aus/max)*(H-pad-20);
+    bars+=`<rect x="${cx+bw*0.18}" y="${H-pad-eh}" width="${bw*0.28}" height="${eh}" rx="3" fill="var(--pink)"></rect>`;
+    bars+=`<rect x="${cx+bw*0.5}" y="${H-pad-ah}" width="${bw*0.28}" height="${ah}" rx="3" fill="var(--amber)"></rect>`;
+    bars+=`<text x="${cx+bw*0.5}" y="${H-pad+14}" text-anchor="middle" font-size="11" fill="var(--muted)">${x.label}</text>`;
+  });
+  el.innerHTML=`<div style="display:flex;gap:16px;font-size:12px;color:var(--muted);margin-bottom:8px"><span><span style="display:inline-block;width:10px;height:10px;background:var(--pink);border-radius:2px;vertical-align:-1px"></span> Einnahmen (netto)</span><span><span style="display:inline-block;width:10px;height:10px;background:var(--amber);border-radius:2px;vertical-align:-1px"></span> Ausgaben (netto)</span></div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto"><line x1="${pad}" y1="${H-pad}" x2="${W-2}" y2="${H-pad}" stroke="var(--border)"></line>${bars}</svg>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px"><span>Aktueller Monat: <b style="color:var(--text)">${fmt(months[months.length-1].ein)}</b> Einnahmen</span><span>Ø/Monat: ${fmt(months.reduce((a,b)=>a+b.ein,0)/months.length)}</span></div>`;
 }
 function renderTodoList(el,list){
   if(!list.length){ document.getElementById(el).innerHTML=emptyState('Keine Aufgaben.','ti-checklist'); return; }
@@ -1334,8 +1467,37 @@ function renderAll(){
   renderFin(document.querySelector('#finTabs button.active').dataset.tab);
   renderCRM(); renderLief(); renderPers(); renderCal();
   fillTodoAssignee(); renderTodoView(); renderKundenList(); renderFirmenZugaenge(); updateIdentity();
-  renderInvites(); updateUnreadBadge(); applyRoleVisibility(); renderRoles();
+  renderInvites(); updateUnreadBadge(); applyRoleVisibility(); renderRoles(); updateNotifDot();
 }
+/* ---------- Benachrichtigungen ---------- */
+function notifItems(){
+  const items=[];
+  const fOpen=store.rechnungen.filter(r=>r.typ==='Forderung'&&!['Bezahlt','Storniert'].includes(r.status));
+  const over=fOpen.filter(r=>{const d=daysTo(r.faellig);return d!==null&&d<0;});
+  const soon=fOpen.filter(r=>{const d=daysTo(r.faellig);return d!==null&&d>=0&&d<=7;});
+  if(myRole()==='admin'){
+    if(over.length) items.push({icon:'ti-alert-triangle',col:'var(--red)',text:over.length+' überfällige Rechnung(en)',view:'finanzen'});
+    if(soon.length) items.push({icon:'ti-clock',col:'var(--amber)',text:soon.length+' Rechnung(en) fällig in 7 Tagen',view:'finanzen'});
+  }
+  const myT=store.aufgaben.filter(a=>!a.done&&isAssignedTo(a,MY_ID)&&a.faellig&&daysTo(a.faellig)<=0);
+  if(myT.length) items.push({icon:'ti-checklist',col:'var(--pink-dark)',text:myT.length+' Aufgabe(n) fällig/überfällig',view:'todo'});
+  const td=parseD(todayStr);
+  const tT=store.termine.filter(t=>t.datum&&sameDay(t.datum,td));
+  if(tT.length) items.push({icon:'ti-calendar',col:'var(--pink-dark)',text:tT.length+' Termin(e) heute',view:'kalender'});
+  return items;
+}
+function unreadCount(){ const u=document.getElementById('navUnread'); return (u&&u.style.display!=='none')?(parseInt(u.textContent)||0):0; }
+function updateNotifDot(){ const dot=document.getElementById('notifDot'); if(!dot) return; const n=notifItems().length+(unreadCount()?1:0); if(n){ dot.style.display=''; dot.textContent=n; } else dot.style.display='none'; }
+function renderNotifPanel(){
+  const panel=document.getElementById('notifPanel'); const items=notifItems(); const un=unreadCount();
+  let h='';
+  if(un) h+=`<div class="gsrow" data-notif="nachrichten" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer"><i class="ti ti-message-circle" style="color:var(--pink)"></i><div style="font-size:13px">${un} ungelesene Nachricht(en)</div></div>`;
+  h+=items.map(it=>`<div class="gsrow" data-notif="${it.view}" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer"><i class="ti ${it.icon}" style="color:${it.col}"></i><div style="font-size:13px">${esc(it.text)}</div></div>`).join('');
+  panel.innerHTML = h || '<div class="hint" style="padding:10px">Keine offenen Benachrichtigungen.</div>';
+}
+document.getElementById('notifBtn').onclick=(e)=>{ e.stopPropagation(); const p=document.getElementById('notifPanel'); const show=p.style.display==='none'; if(show) renderNotifPanel(); p.style.display=show?'block':'none'; };
+document.getElementById('notifPanel').addEventListener('click',e=>{ const r=e.target.closest('[data-notif]'); if(!r) return; document.getElementById('notifPanel').style.display='none'; go(r.dataset.notif); });
+document.addEventListener('click',e=>{ if(!e.target.closest('#notifWrap')){ const p=document.getElementById('notifPanel'); if(p) p.style.display='none'; } });
 
 /* ---------- Standard-Formular ---------- */
 let formSchema=null, formEntity=null, formId=null;
@@ -1410,8 +1572,14 @@ function nextInvoiceNr(){
   const nums=store.rechnungen.filter(r=>r.typ==='Forderung'&&r.nr).map(r=>{const m=String(r.nr).match(/(\d+)\s*$/);return m?+m[1]:0;});
   return 'RE-'+y+'-'+String((nums.length?Math.max(...nums):0)+1).padStart(3,'0');
 }
-let genKundeId=null;
-function openGen(id){
+function nextAngebotNr(){
+  const y=new Date().getFullYear();
+  const nums=store.rechnungen.filter(r=>r.typ==='Angebot'&&r.nr).map(r=>{const m=String(r.nr).match(/(\d+)\s*$/);return m?+m[1]:0;});
+  return 'AN-'+y+'-'+String((nums.length?Math.max(...nums):0)+1).padStart(3,'0');
+}
+let genKundeId=null, genMode='Forderung';
+function openGen(id,mode){
+  if(mode) genMode=mode; else if(id){ const r=store.rechnungen.find(x=>x.id===id); genMode=(r&&r.typ==='Angebot')?'Angebot':'Forderung'; } else genMode='Forderung';
   if(!store.kunden.length){ alert('Bitte zuerst einen Kunden im CRM anlegen.'); openForm('kunden'); return; }
   if(id) openGenForm(null,id); else openPicker();
 }
@@ -1430,8 +1598,11 @@ function openGenForm(kundeId,id){
   const r=id?store.rechnungen.find(x=>x.id===id):{};
   const kid=id?r.kundeId:kundeId; genKundeId=kid;
   const k=store.kunden.find(x=>x.id===kid)||{name:r.partner||''};
-  const defUst=store.settings.ust||'19';
-  document.getElementById('genTitle').textContent=id?'Rechnung bearbeiten':'Neue Rechnung';
+  if(id){ genMode=(r&&r.typ==='Angebot')?'Angebot':'Forderung'; }
+  const isAng=genMode==='Angebot';
+  const klein=!!store.settings.kleinunternehmer;
+  const defUst=klein?'0':(store.settings.ust||'19');
+  document.getElementById('genTitle').textContent=id?(isAng?'Angebot bearbeiten':'Rechnung bearbeiten'):(isAng?'Neues Angebot':'Neue Rechnung');
   document.getElementById('genBody').innerHTML=`
     <div class="field"><label>Kunde (automatisch aus CRM übernommen)</label>
       <div style="background:var(--surface);border-radius:8px;padding:11px 13px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
@@ -1445,8 +1616,9 @@ function openGenForm(kundeId,id){
       </div></div>
     <div class="field"><label>Leistung / Beschreibung</label><input id="g-leistung" value="${esc(r.leistung||'')}" placeholder="z. B. Webentwicklung Juni 2026"></div>
     <div class="field half"><label>Nettobetrag (€)</label><input id="g-netto" type="number" step="0.01" value="${r.netto!=null?esc(r.netto):''}" placeholder="0.00"></div>
-    <div class="field half"><label>USt-Satz (%)</label><select id="g-ust">${['19','7','0'].map(o=>`<option ${String(r.ustSatz||defUst)===o?'selected':''}>${o}</option>`).join('')}</select></div>
+    <div class="field half"><label>USt-Satz (%)</label><select id="g-ust" ${klein?'disabled':''}>${['19','7','0'].map(o=>`<option ${String(r.ustSatz!=null?r.ustSatz:defUst)===o?'selected':''}>${o}</option>`).join('')}</select>${klein?'<div class="hint" style="margin-top:4px">Kleinunternehmer §19 – ohne USt.</div>':''}</div>
     <div class="field half"><label>Rechnungsdatum</label><input id="g-datum" type="date" value="${r.datum||todayStr}"></div>
+    <div class="field half"><label>Leistungsdatum</label><input id="g-leistungsdatum" type="date" value="${r.leistungsdatum||r.datum||todayStr}"></div>
     <div class="field half"><label>Fälligkeit</label><input id="g-faellig" type="date" value="${r.faellig||addDays(r.datum||todayStr,k.zahlungsziel||14)}"></div>
     <div class="total-box" id="g-total"></div>`;
   const calcTotal=()=>{ const n=parseFloat(document.getElementById('g-netto').value)||0; const u=parseFloat(document.getElementById('g-ust').value)||0; const ust=n*u/100; document.getElementById('g-total').innerHTML=`<div class="line"><span>Netto</span><span>${fmt(n)}</span></div><div class="line"><span>zzgl. ${u}% USt</span><span>${fmt(ust)}</span></div><div class="line grand"><span>Gesamtbetrag</span><span>${fmt(n+ust)}</span></div>`; };
@@ -1467,12 +1639,13 @@ document.getElementById('genSave').onclick=async ()=>{
   const netto=parseFloat(document.getElementById('g-netto').value)||0;
   const ustSatz=parseFloat(document.getElementById('g-ust').value)||0;
   const brutto=Math.round(netto*(1+ustSatz/100)*100)/100;
-  const data={ typ:'Forderung', kundeId:k.id, partner:k.name, leistung:document.getElementById('g-leistung').value.trim(),
-    netto, ustSatz, betrag:brutto, datum:document.getElementById('g-datum').value, faellig:document.getElementById('g-faellig').value };
+  const isAng=genMode==='Angebot';
+  const data={ typ:isAng?'Angebot':'Forderung', kundeId:k.id, partner:k.name, leistung:document.getElementById('g-leistung').value.trim(),
+    netto, ustSatz, betrag:brutto, datum:document.getElementById('g-datum').value, leistungsdatum:document.getElementById('g-leistungsdatum').value||null, faellig:document.getElementById('g-faellig').value };
   try{
     let row;
     if(genId){ row=await dbUpdate('rechnungen',genId,data); const i=store.rechnungen.findIndex(x=>x.id===genId); store.rechnungen[i]=row; }
-    else { data.nr=nextInvoiceNr(); data.status='Offen'; row=await dbInsert('rechnungen',data); store.rechnungen.push(row); }
+    else { data.nr=isAng?nextAngebotNr():nextInvoiceNr(); data.status=isAng?'Angebot':'Offen'; row=await dbInsert('rechnungen',data); store.rechnungen.push(row); }
     closeGen(); renderAll(); openInvoice(row.id);
   }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
 };
@@ -1482,7 +1655,9 @@ function openSettings(){
   const s=store.settings||{};
   document.getElementById('setBody').innerHTML =
     `<div class="field"><label>Logo</label><input id="set-logo" type="file" accept="image/*">${s.logo?`<div style="margin-top:8px"><img src="${s.logo}" style="max-height:46px"></div>`:''}</div>`
-    + SET_FIELDS.map(f=> f.area
+    + SET_FIELDS.map(f=> f.t==='check'
+        ? `<div class="field"><label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="checkbox" id="set-${f.k}" ${s[f.k]?'checked':''} style="width:18px;height:18px"> ${f.l}</label></div>`
+        : f.area
         ? `<div class="field"><label>${f.l}</label><textarea id="set-${f.k}" placeholder="${f.ph||''}">${esc(s[f.k]||'')}</textarea></div>`
         : `<div class="field ${f.half?'half':''}"><label>${f.l}</label><input id="set-${f.k}" value="${esc(s[f.k]||'')}" placeholder="${f.ph||''}"></div>`
       ).join('');
@@ -1492,7 +1667,7 @@ function openSettings(){
 document.getElementById('templateBtn').onclick=openSettings;
 document.getElementById('setCancel').onclick=()=>document.getElementById('setModal').classList.remove('open');
 /* Hintergrund-Klick schließt die Einstellungen NICHT – kein Datenverlust. Schließen nur über Abbrechen. */
-document.getElementById('setSave').onclick=async ()=>{ SET_FIELDS.forEach(f=>{ store.settings[f.k]=document.getElementById('set-'+f.k).value.trim(); }); try{ await saveSettings(); }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); } document.getElementById('setModal').classList.remove('open'); renderAll(); };
+document.getElementById('setSave').onclick=async ()=>{ SET_FIELDS.forEach(f=>{ const el=document.getElementById('set-'+f.k); store.settings[f.k]= f.t==='check' ? el.checked : el.value.trim(); }); try{ await saveSettings(); }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); } document.getElementById('setModal').classList.remove('open'); renderAll(); };
 
 /* ---------- Rechnungs-Beleg ---------- */
 let invId=null;
@@ -1500,6 +1675,8 @@ function buildInvoiceHTML(r){
   const s=store.settings||{}; const k=store.kunden.find(x=>x.id===r.kundeId)||{name:r.partner};
   const netto=Number(r.netto!=null?r.netto:r.betrag)||0; const ustSatz=Number(r.ustSatz!=null?r.ustSatz:0); const ust=netto*ustSatz/100; const brutto=Number(r.betrag)||netto+ust;
   const sender=[s.firmenname,s.strasse,s.plzort].filter(Boolean).join(' · ');
+  const klein=!!s.kleinunternehmer || ustSatz===0;
+  const isAngebot=r.typ==='Angebot'; const docWord=isAngebot?'Angebot':'Rechnung';
   return `<div class="invoice" id="invoiceDoc">
     <div class="inv-top">
       <div>${s.logo?`<img class="inv-logo" src="${s.logo}">`:`<div style="font-size:20px;font-weight:700;color:#FF5CE0">${esc(s.firmenname||'Ihre Firma')}</div>`}</div>
@@ -1508,20 +1685,21 @@ function buildInvoiceHTML(r){
     <div class="inv-from">${esc(sender||'Bitte Firmendaten hinterlegen (Zahnrad oben rechts)')}</div>
     <div>${esc(k.name||'')}<br>${esc(custAddr(k)).replace(/\n/g,'<br>')}</div>
     <div class="inv-meta">
-      <div><b>Rechnung</b><br>Nr. ${esc(r.nr||'')}</div>
-      <div style="text-align:right">Rechnungsdatum: ${fmtD(r.datum)}<br>Fällig bis: ${fmtD(r.faellig)}${k.ustid?'<br>USt-IdNr. Kunde: '+esc(k.ustid):''}</div>
+      <div><b>${docWord}</b><br>Nr. ${esc(r.nr||'')}</div>
+      <div style="text-align:right">${isAngebot?'Angebotsdatum':'Rechnungsdatum'}: ${fmtD(r.datum)}<br>Leistungsdatum: ${fmtD(r.leistungsdatum||r.datum)}<br>${isAngebot?'Gültig bis':'Fällig bis'}: ${fmtD(r.faellig)}${k.ustid?'<br>USt-IdNr. Kunde: '+esc(k.ustid):''}</div>
     </div>
-    <h2>Rechnung ${esc(r.nr||'')}</h2>
-    <table class="inv-table"><thead><tr><th>Pos.</th><th>Leistung</th><th style="text-align:right">Betrag (netto)</th></tr></thead>
+    <h2>${docWord} ${esc(r.nr||'')}</h2>
+    <table class="inv-table"><thead><tr><th>Pos.</th><th>Leistung</th><th style="text-align:right">Betrag${klein?'':' (netto)'}</th></tr></thead>
       <tbody><tr><td>1</td><td>${esc(r.leistung||'Dienstleistung')}</td><td style="text-align:right">${fmt(netto)}</td></tr></tbody></table>
     <div class="inv-sum">
-      <div class="line"><span>Zwischensumme netto</span><span>${fmt(netto)}</span></div>
-      <div class="line"><span>zzgl. ${ustSatz}% USt</span><span>${fmt(ust)}</span></div>
-      <div class="line grand"><span>Gesamtbetrag</span><span>${fmt(brutto)}</span></div>
+      ${klein
+        ? `<div class="line grand"><span>Gesamtbetrag</span><span>${fmt(netto)}</span></div><div style="font-size:11px;color:#666;margin-top:6px">Gemäß § 19 UStG wird keine Umsatzsteuer berechnet (Kleinunternehmer).</div>`
+        : `<div class="line"><span>Zwischensumme netto</span><span>${fmt(netto)}</span></div><div class="line"><span>zzgl. ${ustSatz}% USt</span><span>${fmt(ust)}</span></div><div class="line grand"><span>Gesamtbetrag</span><span>${fmt(brutto)}</span></div>`}
     </div>
     <div class="inv-pay">
-      Bitte überweisen Sie den Gesamtbetrag bis zum ${fmtD(r.faellig)} auf folgendes Konto:<br>
-      ${s.bank?'Bank: '+esc(s.bank)+' · ':''}${s.iban?'IBAN: '+esc(s.iban):''}${s.bic?' · BIC: '+esc(s.bic):''}<br>
+      ${isAngebot
+        ? `Dieses Angebot ist freibleibend und gültig bis ${fmtD(r.faellig)}. Wir freuen uns auf Ihre Rückmeldung.<br>`
+        : `Bitte überweisen Sie den Gesamtbetrag bis zum ${fmtD(r.faellig)} auf folgendes Konto:<br>${s.bank?'Bank: '+esc(s.bank)+' · ':''}${s.iban?'IBAN: '+esc(s.iban):''}${s.bic?' · BIC: '+esc(s.bic):''}<br>`}
       ${s.ustid?'USt-IdNr.: '+esc(s.ustid)+'  ':''}${s.steuernr?'Steuernr.: '+esc(s.steuernr):''}
       ${s.footer?'<br><br>'+esc(s.footer):''}
     </div>
@@ -1534,6 +1712,55 @@ document.getElementById('invPdf').onclick=()=>{
   const r=store.rechnungen.find(x=>x.id===invId); const el=document.getElementById('invoiceDoc');
   if(window.html2pdf){ html2pdf().set({margin:0,filename:'Rechnung-'+(r.nr||'')+'.pdf',image:{type:'jpeg',quality:.98},html2canvas:{scale:2},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(el).save(); }
   else { window.print(); }
+};
+function buildXRechnung(r){
+  const s=store.settings||{}; const k=store.kunden.find(x=>x.id===r.kundeId)||{name:r.partner};
+  const X=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const n2=v=>(Number(v)||0).toFixed(2);
+  const netto=Number(r.netto!=null?r.netto:r.betrag)||0; const satz=Number(r.ustSatz!=null?r.ustSatz:0); const ust=Math.round(netto*satz/100*100)/100; const brutto=Number(r.betrag)||netto+ust;
+  const plzort=(s.plzort||'').trim(); const plz=(plzort.match(/\b(\d{4,5})\b/)||[])[1]||''; const ort=plzort.replace(/\b\d{4,5}\b/,'').trim();
+  const kAddr=custAddr(k)||''; const kLines=kAddr.split('\n').map(x=>x.trim()).filter(Boolean); const kStr=kLines[0]||''; const kPo=(kAddr.match(/\b(\d{4,5})\b/)||[])[1]||''; const kOrt=(kLines[kLines.length-1]||'').replace(/\b\d{4,5}\b/,'').trim();
+  const cat= satz>0?'S':'Z';
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<ubl:Invoice xmlns:ubl="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:CustomizationID>urn:cen.eu:en16931:2017</cbc:CustomizationID>
+  <cbc:ID>${X(r.nr||'')}</cbc:ID>
+  <cbc:IssueDate>${X(r.datum||'')}</cbc:IssueDate>
+  <cbc:DueDate>${X(r.faellig||'')}</cbc:DueDate>
+  <cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>
+  <cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>
+  <cac:AccountingSupplierParty><cac:Party>
+    <cac:PostalAddress><cbc:StreetName>${X(s.strasse||'')}</cbc:StreetName><cbc:CityName>${X(ort)}</cbc:CityName><cbc:PostalZone>${X(plz)}</cbc:PostalZone><cac:Country><cbc:IdentificationCode>DE</cbc:IdentificationCode></cac:Country></cac:PostalAddress>
+    ${s.ustid?`<cac:PartyTaxScheme><cbc:CompanyID>${X(s.ustid)}</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>`:''}
+    <cac:PartyLegalEntity><cbc:RegistrationName>${X(s.firmenname||'')}</cbc:RegistrationName></cac:PartyLegalEntity>
+    <cac:Contact><cbc:ElectronicMail>${X(s.email||'')}</cbc:ElectronicMail></cac:Contact>
+  </cac:Party></cac:AccountingSupplierParty>
+  <cac:AccountingCustomerParty><cac:Party>
+    <cac:PostalAddress><cbc:StreetName>${X(kStr)}</cbc:StreetName><cbc:CityName>${X(kOrt)}</cbc:CityName><cbc:PostalZone>${X(kPo)}</cbc:PostalZone><cac:Country><cbc:IdentificationCode>DE</cbc:IdentificationCode></cac:Country></cac:PostalAddress>
+    ${k.ustid?`<cac:PartyTaxScheme><cbc:CompanyID>${X(k.ustid)}</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>`:''}
+    <cac:PartyLegalEntity><cbc:RegistrationName>${X(k.name||'')}</cbc:RegistrationName></cac:PartyLegalEntity>
+    ${k.email?`<cac:Contact><cbc:ElectronicMail>${X(k.email)}</cbc:ElectronicMail></cac:Contact>`:''}
+  </cac:Party></cac:AccountingCustomerParty>
+  <cac:TaxTotal>
+    <cbc:TaxAmount currencyID="EUR">${n2(ust)}</cbc:TaxAmount>
+    <cac:TaxSubtotal><cbc:TaxableAmount currencyID="EUR">${n2(netto)}</cbc:TaxableAmount><cbc:TaxAmount currencyID="EUR">${n2(ust)}</cbc:TaxAmount>
+      <cac:TaxCategory><cbc:ID>${cat}</cbc:ID><cbc:Percent>${n2(satz)}</cbc:Percent><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:TaxCategory></cac:TaxSubtotal>
+  </cac:TaxTotal>
+  <cac:LegalMonetaryTotal>
+    <cbc:LineExtensionAmount currencyID="EUR">${n2(netto)}</cbc:LineExtensionAmount>
+    <cbc:TaxExclusiveAmount currencyID="EUR">${n2(netto)}</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="EUR">${n2(brutto)}</cbc:TaxInclusiveAmount>
+    <cbc:PayableAmount currencyID="EUR">${n2(brutto)}</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+  <cac:InvoiceLine><cbc:ID>1</cbc:ID><cbc:InvoicedQuantity unitCode="C62">1</cbc:InvoicedQuantity><cbc:LineExtensionAmount currencyID="EUR">${n2(netto)}</cbc:LineExtensionAmount>
+    <cac:Item><cbc:Name>${X(r.leistung||'Leistung')}</cbc:Name><cac:ClassifiedTaxCategory><cbc:ID>${cat}</cbc:ID><cbc:Percent>${n2(satz)}</cbc:Percent><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:ClassifiedTaxCategory></cac:Item>
+    <cac:Price><cbc:PriceAmount currencyID="EUR">${n2(netto)}</cbc:PriceAmount></cac:Price></cac:InvoiceLine>
+</ubl:Invoice>`;
+}
+document.getElementById('invXml').onclick=()=>{
+  const r=store.rechnungen.find(x=>x.id===invId); if(!r) return;
+  const xml=buildXRechnung(r);
+  const b=new Blob([xml],{type:'application/xml'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='XRechnung-'+(r.nr||'')+'.xml'; a.click();
 };
 async function invoicePdfBase64(r){
   if(!window.html2pdf) return null;
@@ -1746,7 +1973,7 @@ document.getElementById('sendModal').addEventListener('click',e=>{ if(e.target.i
 document.getElementById('sendConfirm').onclick=()=>{ document.getElementById('sendModal').classList.remove('open'); sendInvoice(sendId); };
 
 /* ---------- Navigation ---------- */
-const titles={dashboard:'Dashboard',finanzen:'Finanzen',email:'E-Mail',crm:'CRM / Kunden',lieferanten:'Anbieter',personal:'Personal',kalender:'Kalender',todo:'To-Do',nachrichten:'Nachrichten',einstellungen:'Einstellungen',intern:'Unternehmensinterne Daten'};
+const titles={dashboard:'Dashboard',finanzen:'Finanzen',email:'E-Mail',crm:'CRM / Kunden',lieferanten:'Anbieter',personal:'Personal',kalender:'Kalender',todo:'To-Do',zeit:'Zeiterfassung',nachrichten:'Nachrichten',einstellungen:'Einstellungen',intern:'Unternehmensinterne Daten'};
 let currentView='dashboard';
 function go(view){
   currentView=view;
@@ -1760,14 +1987,17 @@ function go(view){
   if(view==='intern'){ const t=document.getElementById('internNotes'); if(t) t.value=(store.settings&&store.settings.interneNotizen)||''; }
   if(view==='nachrichten') renderNachrichten();
   if(view==='email') renderEmailView();
-  if(view==='dashboard'||view==='einstellungen'||view==='intern'||view==='nachrichten'||view==='email'){ pa.style.display='none'; return; }
+  if(view==='zeit') renderZeit();
+  if(view==='dashboard'||view==='einstellungen'||view==='intern'||view==='nachrichten'||view==='email'||view==='zeit'){ pa.style.display='none'; return; }
   const finTab=view==='finanzen'?document.querySelector('#finTabs button.active').dataset.tab:null;
   const hideActions=finTab==='AblageRechnung'||finTab==='AblageBeleg';
-  if(view==='finanzen'){ document.getElementById('pdfBtn').style.display=hideActions?'none':''; }
-  if(hideActions){ pa.style.display='none'; return; }
+  if(view==='finanzen'){ document.getElementById('pdfBtn').style.display=(hideActions||finTab==='Abos'||finTab==='Angebot'||finTab==='Kontoabgleich')?'none':''; }
+  if(hideActions||finTab==='Kontoabgleich'){ pa.style.display='none'; return; }
   pa.style.display='';
   let label=map[view]||'Neue Rechnung';
   if(finTab==='Verbindlichkeit') label='Neue Eingangsrechnung';
+  else if(finTab==='Abos') label='Neues Abo';
+  else if(finTab==='Angebot') label='Neues Angebot';
   pa.innerHTML='<i class="ti ti-plus"></i> '+label;
 }
 function primaryClick(){
@@ -1776,7 +2006,7 @@ function primaryClick(){
   else if(currentView==='personal') openForm('personal');
   else if(currentView==='todo') openForm('aufgaben');
   else if(currentView==='kalender') openTermin();
-  else if(currentView==='finanzen' && document.querySelector('#finTabs button.active').dataset.tab==='Verbindlichkeit') openForm('verbindlichkeiten');
+  else if(currentView==='finanzen'){ const t=document.querySelector('#finTabs button.active').dataset.tab; if(t==='Verbindlichkeit') openForm('verbindlichkeiten'); else if(t==='Abos') openAbo(null); else if(t==='Angebot') openGen(null,'Angebot'); else openGen(); }
   else openGen();
 }
 document.getElementById('nav').addEventListener('click',e=>{ const a=e.target.closest('a'); if(a){ go(a.dataset.view); document.body.classList.remove('nav-open'); } });
@@ -1794,10 +2024,11 @@ document.addEventListener('click',e=>{
   const dl=e.target.closest('[data-del]'); if(dl){ const en=dl.dataset.del,id=dl.dataset.id; if(confirm('Eintrag löschen?')){ dbDelete(en,id).then(()=>{ store[en]=store[en].filter(r=>r.id!==id); renderAll(); }).catch(err=>alert('Löschen fehlgeschlagen: '+(err.message||err))); } }
   const td=e.target.closest('[data-todo]'); if(td){ const a=store.aufgaben.find(x=>x.id===td.dataset.todo); if(a){ a.done=!a.done; renderAll(); dbUpdate('aufgaben',a.id,{done:a.done}).catch(err=>alert('Speichern fehlgeschlagen: '+(err.message||err))); } }
   const tab=e.target.closest('#finTabs button'); if(tab){ document.querySelectorAll('#finTabs button').forEach(b=>b.classList.remove('active')); tab.classList.add('active'); renderFin(tab.dataset.tab);
-    const isBeleg=tab.dataset.tab==='AblageRechnung'||tab.dataset.tab==='AblageBeleg';
+    const t=tab.dataset.tab;
+    const isBeleg=t==='AblageRechnung'||t==='AblageBeleg'||t==='Kontoabgleich';
     document.getElementById('primaryAction').style.display=isBeleg?'none':'';
-    document.getElementById('pdfBtn').style.display=isBeleg?'none':'';
-    if(!isBeleg) document.getElementById('primaryAction').innerHTML='<i class="ti ti-plus"></i> '+(tab.dataset.tab==='Verbindlichkeit'?'Neue Eingangsrechnung':'Neue Rechnung'); }
+    document.getElementById('pdfBtn').style.display=(isBeleg||t==='Abos'||t==='Angebot')?'none':'';
+    if(!isBeleg) document.getElementById('primaryAction').innerHTML='<i class="ti ti-plus"></i> '+(t==='Verbindlichkeit'?'Neue Eingangsrechnung':t==='Abos'?'Neues Abo':t==='Angebot'?'Neues Angebot':'Neue Rechnung'); }
 });
 function calShift(dir){ if(calMode==='monat') calRef.setMonth(calRef.getMonth()+dir); else if(calMode==='woche') calRef.setDate(calRef.getDate()+7*dir); else calRef.setDate(calRef.getDate()+dir); renderCal(); }
 document.getElementById('calPrev').onclick=()=>calShift(-1);
@@ -1839,6 +2070,341 @@ document.getElementById('calHits').addEventListener('click',e=>{ const j=e.targe
 
 /* ---------- Export / Import ---------- */
 function exportData(){ const b=new Blob([JSON.stringify(store,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='internes-system-daten.json'; a.click(); }
+function exportBuchungenCSV(){
+  const sep=';'; const esc=v=>{ v=(v==null?'':String(v)); return /[";\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const num=v=>(v==null||v==='')?'':String(Number(v).toFixed(2)).replace('.',',');
+  const head=['Datum','Leistungsdatum','Rechnungsnr','Art','Kategorie','Partner','Netto','USt-Satz','USt-Betrag','Brutto','Status','Leistung/Notiz'];
+  const rows=store.rechnungen.slice().sort((a,b)=>(parseD(a.datum)||0)-(parseD(b.datum)||0)).map(r=>{
+    const art=r.typ==='Forderung'?'Einnahme':'Ausgabe';
+    return [r.datum||'', r.leistungsdatum||'', r.nr||'', art, r.kategorie||'', r.partner||'', num(r.netto), (r.ustSatz!=null?r.ustSatz+'%':''), num(ustOf(r)), num(r.betrag), r.status||'', r.leistung||r.beschreibung||''].map(esc).join(sep);
+  });
+  const csv='﻿'+[head.join(sep),...rows].join('\r\n');
+  const b=new Blob([csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='Buchungen-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+}
+document.getElementById('csvExportBtn').onclick=exportBuchungenCSV;
+
+/* ---------- Papierkorb (soft-delete) ---------- */
+const TRASH_DEFS=[
+  {key:'kunden', label:'Kunden', sel:'id,name,created_at', lbl:r=>r.name||'–'},
+  {key:'rechnungen', label:'Rechnungen', sel:'id,nr,partner,betrag,typ,created_at', lbl:r=>(r.nr||'ohne Nr.')+' · '+(r.partner||'')},
+  {key:'lieferanten', label:'Anbieter', sel:'id,name,created_at', lbl:r=>r.name||'–'},
+  {key:'personal', label:'Personal', sel:'id,name,created_at', lbl:r=>r.name||'–'},
+  {key:'aufgaben', label:'Aufgaben', sel:'id,text,created_at', lbl:r=>r.text||'–'},
+  {key:'termine', label:'Termine', sel:'id,titel,datum,created_at', lbl:r=>r.titel||'–'},
+];
+async function openTrash(){
+  document.getElementById('trashModal').classList.add('open');
+  const body=document.getElementById('trashBody'); body.innerHTML='<div class="hint">Lädt…</div>';
+  let html=''; let any=false;
+  for(const d of TRASH_DEFS){
+    let rows=[]; try{ const {data}=await sb.from(TABLE[d.key]).select(d.sel).eq('geloescht',true).order('created_at',{ascending:false}); rows=data||[]; }catch(e){}
+    if(!rows.length) continue; any=true;
+    html+=`<h4 style="font-size:13px;margin:14px 0 6px">${d.label} (${rows.length})</h4><div class="doclist">`+rows.map(r=>`<div class="row"><span class="grow">${esc(d.lbl(r))}</span><span class="link" data-trestore="${d.key}|${r.id}">Wiederherstellen</span><i class="ti ti-trash iconbtn" data-tpurge="${d.key}|${r.id}" title="Endgültig löschen" style="color:var(--red)"></i></div>`).join('')+'</div>';
+  }
+  body.innerHTML = any ? html : '<div class="hint">Der Papierkorb ist leer.</div>';
+}
+async function trashRestore(key,id){
+  try{ await sb.from(TABLE[key]).update({geloescht:false}).eq('id',id);
+    const {data}=await sb.from(TABLE[key]).select(SELECT[key]||'*').eq('id',id).single();
+    if(data){ const row=fromDb(key,data); const i=store[key].findIndex(x=>x.id===id); if(i>=0) store[key][i]=row; else store[key].push(row); }
+    renderAll(); openTrash();
+  }catch(e){ alert('Wiederherstellen fehlgeschlagen: '+(e.message||e)); }
+}
+async function trashPurge(key,id){
+  if(!confirm('Endgültig löschen? Das kann nicht rückgängig gemacht werden.')) return;
+  try{ await sb.from(TABLE[key]).delete().eq('id',id); openTrash(); }
+  catch(e){ alert('Löschen fehlgeschlagen: '+(e.message||e)); }
+}
+document.getElementById('trashBtn').onclick=openTrash;
+
+/* ---------- 2-Faktor (TOTP) ---------- */
+let twofaEnrollId=null;
+async function open2FA(){
+  const m=document.getElementById('twofaModal'); m.classList.add('open');
+  const body=document.getElementById('twofaBody'); body.innerHTML='<div class="hint">Lädt…</div>';
+  try{
+    const {data:facs}=await sb.auth.mfa.listFactors();
+    const verified=facs&&facs.totp&&facs.totp.find(f=>f.status==='verified');
+    if(verified){ body.innerHTML='<p style="font-size:13px">2-Faktor ist für dein Konto <b>aktiv</b>. Bei jedem Login wirst du nach dem Code aus deiner Authenticator-App gefragt.</p><button class="btn ghost" style="color:var(--red)" id="twofaOff">2-Faktor deaktivieren</button>'; return; }
+    const {data,error}=await sb.auth.mfa.enroll({factorType:'totp'}); if(error) throw error;
+    twofaEnrollId=data.id;
+    const qr=data.totp&&data.totp.qr_code; const secret=data.totp&&data.totp.secret;
+    body.innerHTML=`<p style="font-size:13px;margin:0 0 10px">Scanne den QR-Code mit deiner Authenticator-App (Google Authenticator, Microsoft Authenticator, …) und gib dann den 6-stelligen Code ein.</p>
+      ${qr?`<div style="text-align:center"><img src="${qr}" alt="QR" style="width:180px;height:180px"></div>`:''}
+      ${secret?`<div class="hint" style="text-align:center;word-break:break-all">Schlüssel manuell: <code>${esc(secret)}</code></div>`:''}
+      <div class="field" style="margin-top:12px"><label>Code aus der App</label><input id="twofaCode" inputmode="numeric" placeholder="6-stelliger Code" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px"></div>
+      <div id="twofaErr" style="font-size:12px;color:var(--red);min-height:16px"></div>
+      <button class="btn" id="twofaActivate"><i class="ti ti-check"></i> Aktivieren</button>`;
+  }catch(e){ body.innerHTML='<div class="hint">Fehler: '+esc(e.message||String(e))+'</div>'; }
+}
+document.getElementById('twofaBtn').onclick=open2FA;
+document.getElementById('twofaClose').onclick=()=>document.getElementById('twofaModal').classList.remove('open');
+document.getElementById('twofaBody').addEventListener('click',async e=>{
+  if(e.target.closest('#twofaActivate')){
+    const code=document.getElementById('twofaCode').value.trim(); const errEl=document.getElementById('twofaErr');
+    try{ const {data:ch,error:ce}=await sb.auth.mfa.challenge({factorId:twofaEnrollId}); if(ce) throw ce;
+      const {error:ve}=await sb.auth.mfa.verify({factorId:twofaEnrollId,challengeId:ch.id,code}); if(ve) throw ve;
+      document.getElementById('twofaModal').classList.remove('open'); alert('2-Faktor wurde aktiviert.');
+    }catch(err){ errEl.textContent='Code falsch oder abgelaufen.'; }
+    return;
+  }
+  if(e.target.closest('#twofaOff')){
+    if(!confirm('2-Faktor wirklich deaktivieren?')) return;
+    try{ const {data:facs}=await sb.auth.mfa.listFactors(); const v=facs&&facs.totp&&facs.totp.find(f=>f.status==='verified'); if(v){ await sb.auth.mfa.unenroll({factorId:v.id}); } document.getElementById('twofaModal').classList.remove('open'); alert('2-Faktor deaktiviert.'); }
+    catch(err){ alert('Fehler: '+(err.message||err)); }
+  }
+});
+document.getElementById('trashClose').onclick=()=>document.getElementById('trashModal').classList.remove('open');
+document.getElementById('trashModal').addEventListener('click',e=>{
+  if(e.target.id==='trashModal'){ e.currentTarget.classList.remove('open'); return; }
+  const rs=e.target.closest('[data-trestore]'); if(rs){ const [k,id]=rs.dataset.trestore.split('|'); trashRestore(k,id); return; }
+  const pg=e.target.closest('[data-tpurge]'); if(pg){ const [k,id]=pg.dataset.tpurge.split('|'); trashPurge(k,id); return; }
+});
+
+/* ---------- Globale Suche ---------- */
+function globalSearch(q){
+  q=(q||'').trim().toLowerCase(); const res=[];
+  if(q.length<2) return res;
+  const add=(typ,icon,label,sub,action)=>res.push({typ,icon,label,sub,action});
+  store.kunden.forEach(k=>{ if(((k.name||'')+' '+(k.kontakt||'')+' '+(k.email||'')).toLowerCase().includes(q)) add('Kunde','ti-user',k.name||'–',k.email||'',()=>{ go('crm'); openCustomer(k.id); }); });
+  store.rechnungen.forEach(r=>{ if(((r.nr||'')+' '+(r.partner||'')+' '+(r.leistung||'')).toLowerCase().includes(q)) add('Rechnung','ti-receipt',(r.nr||'ohne Nr.')+' · '+(r.partner||''),fmt(r.betrag)+' · '+(r.status||''),()=>{ go('finanzen'); if(r.typ==='Forderung') openInvoice(r.id); else openForm('verbindlichkeiten',r.id); }); });
+  store.aufgaben.forEach(a=>{ if((a.text||'').toLowerCase().includes(q)) add('Aufgabe','ti-checklist',a.text||'–',a.faellig?('fällig '+fmtD(a.faellig)):'',()=>{ go('todo'); openForm('aufgaben',a.id); }); });
+  store.lieferanten.forEach(l=>{ if(((l.name||'')+' '+(l.kategorie||'')).toLowerCase().includes(q)) add('Anbieter','ti-cloud',l.name||'–',l.kategorie||'',()=>{ go('lieferanten'); openForm('lieferanten',l.id); }); });
+  store.personal.forEach(p=>{ if(((p.name||'')+' '+(p.rolle||'')).toLowerCase().includes(q)) add('Person','ti-id-badge-2',p.name||'–',p.rolle||'',()=>{ go('personal'); openForm('personal',p.id); }); });
+  store.termine.forEach(t=>{ if((t.titel||'').toLowerCase().includes(q)) add('Termin','ti-calendar',t.titel||'–',fmtD(t.datum),()=>{ go('kalender'); }); });
+  return res.slice(0,30);
+}
+let gsResults=[];
+function renderGlobalSearch(q){
+  const box=document.getElementById('globalSearchResults');
+  gsResults=globalSearch(q);
+  if(!q||q.trim().length<2){ box.style.display='none'; box.innerHTML=''; return; }
+  if(!gsResults.length){ box.style.display='block'; box.innerHTML='<div class="hint" style="padding:10px">Keine Treffer.</div>'; return; }
+  box.style.display='block';
+  box.innerHTML=gsResults.map((r,i)=>`<div class="gsrow" data-gs="${i}" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer"><i class="ti ${r.icon}" style="color:var(--pink-dark)"></i><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.label)}</div><div style="font-size:11px;color:var(--muted)">${esc(r.typ)}${r.sub?' · '+esc(r.sub):''}</div></div></div>`).join('');
+}
+document.getElementById('globalSearch').addEventListener('input',e=>renderGlobalSearch(e.target.value));
+document.getElementById('globalSearchResults').addEventListener('click',e=>{ const row=e.target.closest('[data-gs]'); if(!row) return; const r=gsResults[+row.dataset.gs]; document.getElementById('globalSearch').value=''; document.getElementById('globalSearchResults').style.display='none'; if(r&&r.action) r.action(); });
+document.addEventListener('click',e=>{ if(!e.target.closest('#searchWrap')){ const b=document.getElementById('globalSearchResults'); if(b) b.style.display='none'; } });
+
+/* ---------- Abos (wiederkehrende Rechnungen) ---------- */
+const ABO_INT=['Monatlich','Wöchentlich','Vierteljährlich','Jährlich'];
+function aboNextDate(from,intervall){ const d=parseD(from)||new Date(); const x=new Date(d); if(intervall==='Wöchentlich')x.setDate(x.getDate()+7); else if(intervall==='Vierteljährlich')x.setMonth(x.getMonth()+3); else if(intervall==='Jährlich')x.setFullYear(x.getFullYear()+1); else x.setMonth(x.getMonth()+1); return ymd(x); }
+function renderAbos(){
+  const el=document.getElementById('finTable');
+  const head=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px"><div class="hint" style="margin:0;flex:1;min-width:200px">Wiederkehrende Rechnungen – jeden Morgen wird automatisch eine Rechnung erzeugt, wenn ein Abo fällig ist.</div><button class="btn" id="aboNewBtn"><i class="ti ti-plus"></i> Neues Abo</button></div>`;
+  const list=store.abos||[];
+  if(!list.length){ el.innerHTML=head+emptyState('Noch keine Abos. Lege z. B. eine monatliche Wartung an.','ti-repeat'); return; }
+  let h=head+'<table><thead><tr><th>Kunde</th><th>Leistung</th><th class="num">Betrag</th><th>Intervall</th><th>Nächste Rechnung</th><th>Status</th><th class="act"></th></tr></thead><tbody>';
+  list.forEach(a=>{ const brutto=(Number(a.netto)||0)*(1+(Number(a.ust_satz)||0)/100);
+    h+=`<tr><td>${esc(a.partner||'')}</td><td>${esc(a.leistung||'')}</td><td class="num">${fmt(brutto)}</td><td>${esc(a.intervall||'')}</td><td>${fmtD(a.naechster_lauf)}</td><td>${a.aktiv?'<span class="pill green">aktiv</span>':'<span class="pill gray">pausiert</span>'}</td><td class="act"><i class="ti ti-receipt iconbtn" data-abogen="${a.id}" title="Jetzt Rechnung erzeugen"></i><i class="ti ${a.aktiv?'ti-player-pause':'ti-player-play'} iconbtn" data-aboaktiv="${a.id}" title="${a.aktiv?'Pausieren':'Aktivieren'}"></i><i class="ti ti-edit iconbtn" data-aboedit="${a.id}"></i><i class="ti ti-trash iconbtn" data-abodel="${a.id}"></i></td></tr>`; });
+  el.innerHTML=h+'</tbody></table>';
+}
+let aboEditId=null;
+function openAbo(id){
+  if(!store.kunden.length){ alert('Bitte zuerst einen Kunden im CRM anlegen.'); return; }
+  const a=id?store.abos.find(x=>x.id===id):{}; aboEditId=id||null;
+  const opts=store.kunden.map(k=>`<option value="${k.id}" ${a.kunde_id===k.id?'selected':''}>${esc(k.name||'')}</option>`).join('');
+  const defUst=store.settings.kleinunternehmer?'0':(store.settings.ust||'19');
+  document.getElementById('aboTitle').textContent=id?'Abo bearbeiten':'Neues Abo';
+  document.getElementById('aboBody').innerHTML=`
+    <div class="field"><label>Kunde</label><select id="ab-kunde">${opts}</select></div>
+    <div class="field"><label>Leistung</label><input id="ab-leistung" value="${esc(a.leistung||'')}" placeholder="z. B. Wartung & Hosting"></div>
+    <div class="field half"><label>Netto (€)</label><input id="ab-netto" type="number" step="0.01" value="${a.netto!=null?esc(a.netto):''}"></div>
+    <div class="field half"><label>USt-Satz (%)</label><select id="ab-ust">${['19','7','0'].map(o=>`<option ${String(a.ust_satz!=null?a.ust_satz:defUst)===o?'selected':''}>${o}</option>`).join('')}</select></div>
+    <div class="field half"><label>Intervall</label><select id="ab-int">${ABO_INT.map(o=>`<option ${(a.intervall||'Monatlich')===o?'selected':''}>${o}</option>`).join('')}</select></div>
+    <div class="field half"><label>Zahlungsziel (Tage)</label><input id="ab-ziel" type="number" value="${a.zahlungsziel!=null?a.zahlungsziel:14}"></div>
+    <div class="field"><label>Nächste Rechnung am</label><input id="ab-next" type="date" value="${a.naechster_lauf||todayStr}"></div>`;
+  document.getElementById('aboModal').classList.add('open');
+}
+document.getElementById('aboCancel').onclick=()=>document.getElementById('aboModal').classList.remove('open');
+document.getElementById('aboSave').onclick=async ()=>{
+  const kid=document.getElementById('ab-kunde').value; const k=store.kunden.find(x=>x.id===kid); if(!k){ alert('Bitte Kunde wählen.'); return; }
+  const obj={ kunde_id:kid, partner:k.name, leistung:document.getElementById('ab-leistung').value.trim(), netto:parseFloat(document.getElementById('ab-netto').value)||0, ust_satz:parseFloat(document.getElementById('ab-ust').value)||0, intervall:document.getElementById('ab-int').value, zahlungsziel:parseInt(document.getElementById('ab-ziel').value)||14, naechster_lauf:document.getElementById('ab-next').value||todayStr };
+  try{
+    if(aboEditId){ const {data,error}=await sb.from('abos').update(obj).eq('id',aboEditId).select().single(); if(error)throw error; const i=store.abos.findIndex(x=>x.id===aboEditId); store.abos[i]=data; }
+    else { obj.aktiv=true; obj.erstellt_von=MY_ID; const {data,error}=await sb.from('abos').insert(obj).select().single(); if(error)throw error; store.abos.push(data); }
+    document.getElementById('aboModal').classList.remove('open'); renderFin('Abos');
+  }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
+};
+async function aboToggle(id){ const a=store.abos.find(x=>x.id===id); if(!a) return; try{ const {data,error}=await sb.from('abos').update({aktiv:!a.aktiv}).eq('id',id).select().single(); if(error)throw error; const i=store.abos.findIndex(x=>x.id===id); store.abos[i]=data; renderFin('Abos'); }catch(e){ alert('Fehler: '+(e.message||e)); } }
+async function aboDelete(id){ if(!confirm('Abo löschen?')) return; try{ await sb.from('abos').delete().eq('id',id); store.abos=store.abos.filter(x=>x.id!==id); renderFin('Abos'); }catch(e){ alert('Löschen fehlgeschlagen: '+(e.message||e)); } }
+async function aboGenerateNow(id){
+  const a=store.abos.find(x=>x.id===id); if(!a) return;
+  if(!confirm('Jetzt sofort eine Rechnung aus diesem Abo erzeugen?')) return;
+  const netto=Number(a.netto)||0, ust=Number(a.ust_satz)||0, brutto=Math.round(netto*(1+ust/100)*100)/100;
+  const data={ typ:'Forderung', kundeId:a.kunde_id, partner:a.partner, nr:nextInvoiceNr(), leistung:a.leistung, netto, ustSatz:ust, betrag:brutto, datum:todayStr, leistungsdatum:todayStr, faellig:addDays(todayStr,a.zahlungsziel||14), status:'Offen', beschreibung:'Aus Abo erzeugt' };
+  try{ const row=await dbInsert('rechnungen',data); store.rechnungen.push(row);
+    const next=aboNextDate(a.naechster_lauf||todayStr, a.intervall||'Monatlich'); await sb.from('abos').update({naechster_lauf:next}).eq('id',a.id); a.naechster_lauf=next;
+    renderAll(); openInvoice(row.id);
+  }catch(e){ alert('Fehler: '+(e.message||e)); }
+}
+
+/* ---------- Angebote ---------- */
+function renderAngebote(){
+  const el=document.getElementById('finTable'); const q=finQ();
+  let data=store.rechnungen.filter(r=>r.typ==='Angebot'); if(q) data=data.filter(r=>((r.nr||'')+' '+(r.partner||'')).toLowerCase().includes(q));
+  data.sort((a,b)=>(parseD(b.datum)||0)-(parseD(a.datum)||0));
+  if(!data.length){ el.innerHTML=emptyState(q?'Keine Treffer.':'Noch keine Angebote. Oben rechts „+ Neues Angebot".','ti-file-text'); return; }
+  let h='<table><thead><tr><th>Nr.</th><th>Kunde</th><th>Datum</th><th class="num">Betrag</th><th>Status</th><th class="act"></th></tr></thead><tbody>';
+  data.forEach(r=>{ const st=r.status==='Angenommen'?'<span class="pill green">Angenommen</span>':r.status==='Abgelehnt'?'<span class="pill red">Abgelehnt</span>':'<span class="pill amber">Offen</span>';
+    h+=`<tr><td>${esc(r.nr||'')}</td><td>${esc(r.partner||'')}</td><td>${fmtD(r.datum)}</td><td class="num">${fmt(r.betrag)}</td><td>${st}</td><td class="act"><i class="ti ti-eye iconbtn" data-inv="${r.id}" title="Ansehen / PDF"></i><i class="ti ti-mail iconbtn" data-mail="${r.id}" title="An Kunde senden"></i><i class="ti ti-edit iconbtn" data-genedit="${r.id}"></i><i class="ti ti-arrow-right-circle iconbtn" data-angconv="${r.id}" title="In Rechnung umwandeln" style="color:var(--green)"></i><i class="ti ti-trash iconbtn" data-del="rechnungen" data-id="${r.id}"></i></td></tr>`; });
+  el.innerHTML=h+'</tbody></table>';
+}
+async function convertAngebot(id){
+  const a=store.rechnungen.find(x=>x.id===id); if(!a) return;
+  if(!confirm('Angebot '+(a.nr||'')+' in eine Rechnung umwandeln?')) return;
+  const k=store.kunden.find(x=>x.id===a.kundeId)||{};
+  const data={ typ:'Forderung', kundeId:a.kundeId, partner:a.partner, nr:nextInvoiceNr(), leistung:a.leistung, netto:a.netto, ustSatz:a.ustSatz, betrag:a.betrag, datum:todayStr, leistungsdatum:todayStr, faellig:addDays(todayStr,k.zahlungsziel||14), status:'Offen', beschreibung:'Aus Angebot '+(a.nr||'')+' erstellt' };
+  try{ const row=await dbInsert('rechnungen',data); store.rechnungen.push(row);
+    const upd=await dbUpdate('rechnungen',a.id,{status:'Angenommen'}); const i=store.rechnungen.findIndex(x=>x.id===a.id); if(i>=0) store.rechnungen[i]=upd;
+    renderAll(); openInvoice(row.id);
+  }catch(e){ alert('Fehler: '+(e.message||e)); }
+}
+/* ---------- Zeiterfassung ---------- */
+let zeitEditId=null;
+function zeitDefaultSatz(){ return parseFloat(store.settings.stundensatz)||0; }
+function fillZeitKunde(){ const sel=document.getElementById('zeitKunde'); if(!sel) return; const cur=sel.value; sel.innerHTML='<option value="">Alle Kunden</option>'+store.kunden.map(k=>`<option value="${k.id}">${esc(k.name||'')}</option>`).join(''); sel.value=cur; }
+function renderZeit(){
+  fillZeitKunde();
+  const kid=document.getElementById('zeitKunde').value;
+  const q=(document.getElementById('zeitProjekt').value||'').toLowerCase();
+  const status=document.getElementById('zeitStatus').value;
+  let list=store.zeiten.slice();
+  if(kid) list=list.filter(z=>z.kunde_id===kid);
+  if(q) list=list.filter(z=>((z.projekt||'')+' '+(z.beschreibung||'')).toLowerCase().includes(q));
+  if(status==='offen') list=list.filter(z=>!z.abgerechnet);
+  else if(status==='abgerechnet') list=list.filter(z=>z.abgerechnet);
+  const betrag=z=>(Number(z.dauer)||0)*(Number(z.stundensatz)||0);
+  const offen=list.filter(z=>!z.abgerechnet);
+  const sumH=offen.reduce((a,z)=>a+(Number(z.dauer)||0),0); const sumB=offen.reduce((a,z)=>a+betrag(z),0);
+  const k=store.kunden.find(x=>x.id===kid);
+  document.getElementById('zeitSummary').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><div><b>${sumH.toFixed(2).replace('.',',')} Std</b> offen${k?(' für '+esc(k.name)):''} · <b>${fmt(sumB)}</b></div>${(kid&&offen.length)?`<button class="btn" id="zeitBillBtn"><i class="ti ti-receipt"></i> Offene Stunden abrechnen</button>`:'<span class="hint" style="margin:0">Kunde wählen, um offene Stunden abzurechnen.</span>'}</div>`;
+  const el=document.getElementById('zeitTable');
+  if(!list.length){ el.innerHTML=emptyState('Keine Einträge.','ti-clock'); return; }
+  let h='<table><thead><tr><th>Datum</th><th>Kunde</th><th>Projekt</th><th>Beschreibung</th><th class="num">Std</th><th class="num">Satz</th><th class="num">Betrag</th><th>Status</th><th class="act"></th></tr></thead><tbody>';
+  list.forEach(z=>{ h+=`<tr><td>${fmtD(z.datum)}</td><td>${esc(z.partner||'')}</td><td>${esc(z.projekt||'')}</td><td>${esc(z.beschreibung||'')}</td><td class="num">${(Number(z.dauer)||0).toFixed(2).replace('.',',')}</td><td class="num">${fmt(z.stundensatz)}</td><td class="num">${fmt(betrag(z))}</td><td>${z.abgerechnet?'<span class="pill green">abgerechnet</span>':'<span class="pill amber">offen</span>'}</td><td class="act">${z.abgerechnet?'':`<i class="ti ti-edit iconbtn" data-zeitedit="${z.id}"></i><i class="ti ti-trash iconbtn" data-zeitdel="${z.id}"></i>`}</td></tr>`; });
+  el.innerHTML=h+'</tbody></table>';
+}
+function openZeit(id){
+  if(!store.kunden.length){ alert('Bitte zuerst einen Kunden im CRM anlegen.'); return; }
+  const z=id?store.zeiten.find(x=>x.id===id):{}; zeitEditId=id||null;
+  const presetKid=z.kunde_id||document.getElementById('zeitKunde').value||'';
+  const opts=store.kunden.map(k=>`<option value="${k.id}" ${presetKid===k.id?'selected':''}>${esc(k.name||'')}</option>`).join('');
+  document.getElementById('zeitTitle').textContent=id?'Zeit bearbeiten':'Zeit erfassen';
+  document.getElementById('zeitBody').innerHTML=`
+    <div class="field"><label>Kunde</label><select id="z-kunde">${opts}</select></div>
+    <div class="field half"><label>Projekt</label><input id="z-projekt" value="${esc(z.projekt||'')}" placeholder="z. B. Website Relaunch"></div>
+    <div class="field half"><label>Datum</label><input id="z-datum" type="date" value="${z.datum||todayStr}"></div>
+    <div class="field half"><label>Dauer (Stunden)</label><input id="z-dauer" type="number" step="0.25" value="${z.dauer!=null?esc(z.dauer):''}" placeholder="z. B. 1.5"></div>
+    <div class="field half"><label>Stundensatz (€)</label><input id="z-satz" type="number" step="0.01" value="${z.stundensatz!=null?esc(z.stundensatz):zeitDefaultSatz()}"></div>
+    <div class="field"><label>Beschreibung</label><textarea id="z-besch" placeholder="Was wurde gemacht?">${esc(z.beschreibung||'')}</textarea></div>`;
+  document.getElementById('zeitModal').classList.add('open');
+}
+document.getElementById('zeitCancel').onclick=()=>document.getElementById('zeitModal').classList.remove('open');
+document.getElementById('zeitSave').onclick=async ()=>{
+  const kid=document.getElementById('z-kunde').value; const k=store.kunden.find(x=>x.id===kid); if(!k){ alert('Bitte Kunde wählen.'); return; }
+  const obj={ kunde_id:kid, partner:k.name, projekt:document.getElementById('z-projekt').value.trim(), datum:document.getElementById('z-datum').value||todayStr, dauer:parseFloat(document.getElementById('z-dauer').value)||0, stundensatz:parseFloat(document.getElementById('z-satz').value)||0, beschreibung:document.getElementById('z-besch').value.trim() };
+  if(!obj.dauer){ alert('Bitte eine Dauer angeben.'); return; }
+  try{
+    if(zeitEditId){ const {data,error}=await sb.from('zeiten').update(obj).eq('id',zeitEditId).select().single(); if(error)throw error; const i=store.zeiten.findIndex(x=>x.id===zeitEditId); store.zeiten[i]=data; }
+    else { obj.abgerechnet=false; obj.erstellt_von=MY_ID; const {data,error}=await sb.from('zeiten').insert(obj).select().single(); if(error)throw error; store.zeiten.unshift(data); }
+    document.getElementById('zeitModal').classList.remove('open'); renderZeit();
+  }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
+};
+async function billZeiten(kid){
+  const k=store.kunden.find(x=>x.id===kid); if(!k) return;
+  const offen=store.zeiten.filter(z=>z.kunde_id===kid && !z.abgerechnet && (Number(z.dauer)||0)>0);
+  if(!offen.length){ alert('Keine offenen Stunden für diesen Kunden.'); return; }
+  const sumH=offen.reduce((a,z)=>a+(Number(z.dauer)||0),0);
+  const netto=Math.round(offen.reduce((a,z)=>a+(Number(z.dauer)||0)*(Number(z.stundensatz)||0),0)*100)/100;
+  if(!confirm(`${offen.length} Einträge (${sumH.toFixed(2).replace('.',',')} Std, ${fmt(netto)} netto) für ${k.name} in eine Rechnung umwandeln?`)) return;
+  const ustSatz=store.settings.kleinunternehmer?0:(parseFloat(store.settings.ust)||19);
+  const brutto=Math.round(netto*(1+ustSatz/100)*100)/100;
+  const projekte=[...new Set(offen.map(z=>z.projekt).filter(Boolean))].join(', ');
+  const leistung='Geleistete Stunden'+(projekte?(' – '+projekte):'')+' ('+sumH.toFixed(2).replace('.',',')+' Std)';
+  const data={ typ:'Forderung', kundeId:kid, partner:k.name, nr:nextInvoiceNr(), leistung, netto, ustSatz, betrag:brutto, datum:todayStr, leistungsdatum:todayStr, faellig:addDays(todayStr,k.zahlungsziel||14), status:'Offen', beschreibung:'Aus Zeiterfassung ('+offen.length+' Einträge)' };
+  try{
+    const row=await dbInsert('rechnungen',data); store.rechnungen.push(row);
+    for(const z of offen){ await sb.from('zeiten').update({abgerechnet:true,rechnung_id:row.id}).eq('id',z.id); z.abgerechnet=true; z.rechnung_id=row.id; }
+    renderAll(); openInvoice(row.id);
+  }catch(e){ alert('Fehler: '+(e.message||e)); }
+}
+document.getElementById('zeitNewBtn').onclick=()=>openZeit(null);
+document.getElementById('zeitKunde').onchange=renderZeit;
+document.getElementById('zeitProjekt').oninput=renderZeit;
+document.getElementById('zeitStatus').onchange=renderZeit;
+document.getElementById('zeitSummary').addEventListener('click',e=>{ if(e.target.closest('#zeitBillBtn')){ const kid=document.getElementById('zeitKunde').value; if(kid) billZeiten(kid); } });
+document.getElementById('zeitTable').addEventListener('click',e=>{
+  const ed=e.target.closest('[data-zeitedit]'); if(ed){ openZeit(ed.dataset.zeitedit); return; }
+  const dl=e.target.closest('[data-zeitdel]'); if(dl){ if(confirm('Eintrag löschen?')) sb.from('zeiten').delete().eq('id',dl.dataset.zeitdel).then(()=>{ store.zeiten=store.zeiten.filter(x=>x.id!==dl.dataset.zeitdel); renderZeit(); }); return; }
+});
+
+/* ---------- Kontoauszug-Import (CSV) & Abgleich ---------- */
+let bankMatches=[];
+function parseCsvLine(line, delim){ const out=[]; let cur='',q=false; for(let i=0;i<line.length;i++){ const c=line[i]; if(q){ if(c==='"'){ if(line[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; } else { if(c==='"') q=true; else if(c===delim){ out.push(cur); cur=''; } else cur+=c; } } out.push(cur); return out; }
+function deNum(s){ s=String(s||'').trim().replace(/\s/g,''); if(!s) return null; if(s.indexOf(',')>-1 && s.indexOf('.')>-1) s=s.replace(/\./g,'').replace(',','.'); else if(s.indexOf(',')>-1) s=s.replace(',','.'); const n=parseFloat(s); return isNaN(n)?null:n; }
+function deDate(s){ s=String(s||'').trim(); let m=s.match(/(\d{1,2})[.\/](\d{1,2})[.\/](\d{2,4})/); if(m){ let y=m[3]; if(y.length===2) y='20'+y; return y+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'); } m=s.match(/(\d{4})-(\d{2})-(\d{2})/); return m?m[0]:''; }
+function renderBankImport(){
+  const el=document.getElementById('finTable');
+  el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px"><div class="hint" style="margin:0;flex:1;min-width:220px">Lade den CSV-Export deines Bankkontos hoch. Beträge werden automatisch offenen Rechnungen zugeordnet (Eingang → Forderung, Ausgang → Verbindlichkeit). Du bestätigst, was als bezahlt markiert wird.</div><button class="btn" id="bankUploadBtn"><i class="ti ti-upload"></i> Kontoauszug (CSV) laden</button></div><div id="bankResult"></div>`;
+}
+function processBankCsv(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim()); if(!lines.length) return;
+  const delim=(lines[0].match(/;/g)||[]).length>=(lines[0].match(/,/g)||[]).length?';':',';
+  const header=parseCsvLine(lines[0],delim).map(h=>h.toLowerCase().trim());
+  const find=(...names)=>header.findIndex(h=>names.some(n=>h.includes(n)));
+  const iDate=find('buchungstag','datum','valuta','date');
+  const iAmt=find('betrag','umsatz','amount','wert');
+  const iText=find('verwendungszweck','buchungstext','vorgang','zweck','description','name','beguenstigter','auftraggeber');
+  const rows=[];
+  for(let i=1;i<lines.length;i++){ const c=parseCsvLine(lines[i],delim); if(c.length<2) continue;
+    const amt=deNum(iAmt>=0?c[iAmt]:c[c.length-1]); if(amt==null||amt===0) continue;
+    rows.push({ datum:deDate(iDate>=0?c[iDate]:c[0]), betrag:amt, zweck:(iText>=0?c[iText]:c.join(' ')).slice(0,120) });
+  }
+  bankMatches=rows.map(t=>{
+    const incoming=t.betrag>0; const abs=Math.round(Math.abs(t.betrag)*100)/100;
+    const pool=store.rechnungen.filter(r=> r.typ===(incoming?'Forderung':'Verbindlichkeit') && !['Bezahlt','Storniert'].includes(r.status));
+    const z=(t.zweck||'').toLowerCase();
+    let match=pool.find(r=> r.nr && z.includes(String(r.nr).toLowerCase()) && Math.abs((Number(r.betrag)||0)-abs)<0.02);
+    if(!match) match=pool.find(r=> Math.abs((Number(r.betrag)||0)-abs)<0.02);
+    return { ...t, abs, incoming, rechnungId: match?match.id:'' };
+  });
+  renderBankResult();
+}
+function renderBankResult(){
+  const el=document.getElementById('bankResult');
+  if(!bankMatches.length){ el.innerHTML=emptyState('Keine verwertbaren Buchungen in der Datei gefunden.','ti-file-alert'); return; }
+  const opts=(incoming,sel)=>{ const pool=store.rechnungen.filter(r=> r.typ===(incoming?'Forderung':'Verbindlichkeit') && !['Bezahlt','Storniert'].includes(r.status)); return '<option value="">— keine —</option>'+pool.map(r=>`<option value="${r.id}" ${sel===r.id?'selected':''}>${esc(r.nr||'ohne Nr.')} · ${esc(r.partner||'')} · ${fmt(r.betrag)}</option>`).join(''); };
+  const matched=bankMatches.filter(m=>m.rechnungId).length;
+  let h=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px"><div class="hint" style="margin:0">${bankMatches.length} Buchungen · ${matched} automatisch zugeordnet</div><button class="btn" id="bankApplyBtn"><i class="ti ti-check"></i> Zugeordnete als bezahlt markieren</button></div>`;
+  h+='<table><thead><tr><th>Datum</th><th>Verwendungszweck</th><th class="num">Betrag</th><th>Zuordnung zu Rechnung</th></tr></thead><tbody>';
+  bankMatches.forEach((m,i)=>{ h+=`<tr><td>${fmtD(m.datum)}</td><td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.zweck)}</td><td class="num" style="color:${m.incoming?'var(--green)':'var(--red)'}">${m.incoming?'+':'−'}${fmt(m.abs)}</td><td><select data-bankmatch="${i}" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;max-width:230px">${opts(m.incoming,m.rechnungId)}</select></td></tr>`; });
+  el.innerHTML=h+'</tbody></table>';
+}
+async function applyBankMatches(){
+  const toPay=bankMatches.filter(m=>m.rechnungId);
+  if(!toPay.length){ alert('Keine Zuordnung ausgewählt.'); return; }
+  if(!confirm(toPay.length+' Rechnung(en) als bezahlt markieren?')) return;
+  let done=0;
+  for(const m of toPay){ const r=store.rechnungen.find(x=>x.id===m.rechnungId); if(!r||r.status==='Bezahlt') continue;
+    try{ const row=await dbUpdate('rechnungen',r.id,{status:'Bezahlt'}); const idx=store.rechnungen.findIndex(x=>x.id===r.id); if(idx>=0) store.rechnungen[idx]=row; done++; }catch(e){}
+  }
+  bankMatches=[]; renderAll(); renderFin('Kontoabgleich'); alert(done+' Rechnung(en) als bezahlt markiert.');
+}
+document.getElementById('bankFile').onchange=e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{ try{ processBankCsv(rd.result); }catch(err){ alert('CSV konnte nicht gelesen werden: '+(err.message||err)); } }; rd.readAsText(f,'utf-8'); e.target.value=''; };
+document.getElementById('finTable').addEventListener('change',e=>{ const s=e.target.closest('[data-bankmatch]'); if(s){ const i=+s.dataset.bankmatch; if(bankMatches[i]) bankMatches[i].rechnungId=s.value; } });
+
+document.getElementById('finTable').addEventListener('click',e=>{
+  if(e.target.closest('#bankUploadBtn')){ document.getElementById('bankFile').click(); return; }
+  if(e.target.closest('#bankApplyBtn')){ applyBankMatches(); return; }
+  if(e.target.closest('#aboNewBtn')){ openAbo(null); return; }
+  const ag=e.target.closest('[data-abogen]'); if(ag){ aboGenerateNow(ag.dataset.abogen); return; }
+  const aa=e.target.closest('[data-aboaktiv]'); if(aa){ aboToggle(aa.dataset.aboaktiv); return; }
+  const ae=e.target.closest('[data-aboedit]'); if(ae){ openAbo(ae.dataset.aboedit); return; }
+  const ad=e.target.closest('[data-abodel]'); if(ad){ aboDelete(ad.dataset.abodel); return; }
+  const ac=e.target.closest('[data-angconv]'); if(ac){ convertAngebot(ac.dataset.angconv); return; }
+});
 function triggerImport(){ document.getElementById('importFile').click(); }
 document.getElementById('expBtn').onclick=exportData;
 document.getElementById('impBtn').onclick=triggerImport;
@@ -2227,6 +2793,37 @@ document.getElementById('authBtn').onclick=async ()=>{
   const {error}=await sb.auth.signInWithPassword({email,password});
   btn.disabled=false; btn.textContent=lbl;
   if(error){ errEl.textContent='Login fehlgeschlagen: '+error.message; return; }
+  try{ const {data:aal}=await sb.auth.mfa.getAuthenticatorAssuranceLevel(); if(aal && aal.nextLevel==='aal2' && aal.nextLevel!==aal.currentLevel){ document.getElementById('mfaBox').style.display='block'; document.getElementById('mfaCode').focus(); errEl.textContent=''; return; } }catch(_){}
+  document.getElementById('authOverlay').style.display='none';
+  await loadAll();
+};
+async function mfaLoginVerify(){
+  const code=document.getElementById('mfaCode').value.trim(); const errEl=document.getElementById('authErr');
+  try{
+    const {data:facs}=await sb.auth.mfa.listFactors();
+    const totp=facs&&facs.totp&&facs.totp[0]; if(!totp){ errEl.textContent='Kein 2FA-Faktor gefunden.'; return; }
+    const {data:ch,error:ce}=await sb.auth.mfa.challenge({factorId:totp.id}); if(ce) throw ce;
+    const {error:ve}=await sb.auth.mfa.verify({factorId:totp.id,challengeId:ch.id,code}); if(ve) throw ve;
+    document.getElementById('authOverlay').style.display='none'; document.getElementById('mfaBox').style.display='none';
+    await loadAll();
+  }catch(e){ errEl.textContent='Code falsch oder abgelaufen.'; }
+}
+document.getElementById('mfaBtn').onclick=mfaLoginVerify;
+document.getElementById('mfaCode').addEventListener('keydown',e=>{ if(e.key==='Enter') mfaLoginVerify(); });
+document.getElementById('authForgot').onclick=async ()=>{
+  const email=document.getElementById('authEmail').value.trim(); const errEl=document.getElementById('authErr');
+  if(!email){ errEl.style.color='#A32D2D'; errEl.textContent='Bitte zuerst deine E-Mail oben eingeben.'; return; }
+  if(!sb){ errEl.textContent='Keine Verbindung.'; return; }
+  const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+  if(error){ errEl.style.color='#A32D2D'; errEl.textContent='Fehler: '+error.message; return; }
+  errEl.style.color='#3B6D11'; errEl.textContent='E-Mail zum Zurücksetzen gesendet – bitte Posteingang prüfen.';
+};
+document.getElementById('recBtn').onclick=async ()=>{
+  const pw=document.getElementById('recPw').value; const errEl=document.getElementById('recErr');
+  if((pw||'').length<6){ errEl.textContent='Mindestens 6 Zeichen.'; return; }
+  const {error}=await sb.auth.updateUser({password:pw});
+  if(error){ errEl.textContent='Fehler: '+error.message; return; }
+  document.getElementById('recoveryOverlay').style.display='none';
   document.getElementById('authOverlay').style.display='none';
   await loadAll();
 };
@@ -2440,6 +3037,7 @@ async function updateUnreadBadge(){
   let total=count||0;
   try{ const groups=myGroups(); if(groups.length){ const {data:gm}=await sb.from('nachrichten').select('gruppe_id,von,created_at').not('gruppe_id','is',null); (gm||[]).forEach(m=>{ if(m.von!==MY_ID && m.created_at>groupLastRead(m.gruppe_id)) total++; }); } }catch(e){}
   const b=document.getElementById('navUnread'); if(b){ if(total){ b.textContent=total; b.style.display=''; } else b.style.display='none'; }
+  try{ updateNotifDot(); }catch(e){}
 }
 function renderInvites(){
   const el=document.getElementById('calInvites'); if(!el) return;
@@ -2501,10 +3099,12 @@ function setupRealtime(){
 }
 
 go('dashboard');
+if(sb){ sb.auth.onAuthStateChange((event)=>{ if(event==='PASSWORD_RECOVERY'){ document.getElementById('recoveryOverlay').style.display='flex'; } }); }
 (async ()=>{
   if(!sb){ document.getElementById('authErr').textContent='Supabase nicht geladen (Internetverbindung nötig).'; return; }
+  if(location.hash.indexOf('type=recovery')>-1){ document.getElementById('recoveryOverlay').style.display='flex'; }
   const {data:{session}}=await sb.auth.getSession();
-  if(session){ document.getElementById('authOverlay').style.display='none'; await loadAll(); }
+  if(session && location.hash.indexOf('type=recovery')===-1){ document.getElementById('authOverlay').style.display='none'; await loadAll(); }
 })();
 </script>
 </body>
