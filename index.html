@@ -479,19 +479,8 @@
             <div style="flex:1;min-width:170px"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px">Danach erneut alle … Tage</label><input id="m-intervall" type="number" min="1" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px"></div>
           </div>
           <p class="hint" style="margin:10px 0 0">Der Prüflauf passiert automatisch jeden Morgen (ca. 8:00 Uhr). Pro Rechnung wird höchstens im eingestellten Intervall erinnert. <span class="link" id="m-runnow">Jetzt prüfen & senden</span></p>
+          <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px"><button class="btn" id="m-save"><i class="ti ti-device-floppy"></i> Speichern</button></div>
         </div>
-        <div class="card">
-          <div class="head"><h3><i class="ti ti-template" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>E-Mail-Vorlagen</h3></div>
-          <p class="hint" style="margin:0 0 12px">Platzhalter werden automatisch ersetzt: <code>{nr}</code> Rechnungsnummer, <code>{betrag}</code>, <code>{faellig}</code> Fälligkeit, <code>{tage}</code> Tage überfällig, <code>{kunde}</code>, <code>{firma}</code>.</p>
-          <h4 style="font-size:13px;margin:0 0 6px">Rechnungs-E-Mail</h4>
-          <div class="field"><label>Betreff</label><input id="m-rbetreff" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px"></div>
-          <div class="field"><label>Text</label><textarea id="m-rtext" rows="6" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-family:inherit"></textarea></div>
-          <h4 style="font-size:13px;margin:16px 0 6px">Zahlungserinnerung</h4>
-          <div class="field"><label>Betreff</label><input id="m-mbetreff" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px"></div>
-          <div class="field"><label>Text</label><textarea id="m-mtext" rows="6" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-family:inherit"></textarea></div>
-          <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:6px"><button class="btn" id="m-save"><i class="ti ti-device-floppy"></i> Speichern</button></div>
-        </div>
-        <p class="hint">Versand läuft über euer IONOS-Postfach (team@webtimez.com). Beim Senden einer Rechnung oder Erinnerung öffnet sich zuerst ein Editor, in dem du die E-Mail anpassen kannst, bevor sie rausgeht.</p>
         </div>
       </section>
 
@@ -1946,21 +1935,15 @@ function renderEmailView(){
   document.getElementById('m-auto').checked=c.autoMahnung;
   document.getElementById('m-ab').value=c.abTagen;
   document.getElementById('m-intervall').value=c.intervallTage;
-  document.getElementById('m-rbetreff').value=c.rBetreff;
-  document.getElementById('m-rtext').value=c.rText;
-  document.getElementById('m-mbetreff').value=c.mBetreff;
-  document.getElementById('m-mtext').value=c.mText;
   renderMailFolder();
 }
 document.getElementById('m-save').onclick=async ()=>{
+  const c=mailCfg();
   store.settings.mail={
     autoMahnung:document.getElementById('m-auto').checked,
     abTagen:Math.max(0,Number(document.getElementById('m-ab').value)||0),
     intervallTage:Math.max(1,Number(document.getElementById('m-intervall').value)||7),
-    rBetreff:document.getElementById('m-rbetreff').value,
-    rText:document.getElementById('m-rtext').value,
-    mBetreff:document.getElementById('m-mbetreff').value,
-    mText:document.getElementById('m-mtext').value
+    rBetreff:c.rBetreff, rText:c.rText, mBetreff:c.mBetreff, mText:c.mText
   };
   try{ await saveSettings(); const b=document.getElementById('m-save'); b.innerHTML='<i class="ti ti-check"></i> Gespeichert'; setTimeout(()=>b.innerHTML='<i class="ti ti-device-floppy"></i> Speichern',1500); }
   catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
