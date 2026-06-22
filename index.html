@@ -1156,9 +1156,15 @@ function deriveAmounts(o){
 }
 function ustOf(r){
   const n=nv(r.netto), b=nv(r.betrag), rt=nv(r.ustSatz);
+  // Ein ausdrücklich hinterlegter USt-Satz hat Vorrang – auch 0 % (z. B. Versicherung,
+  // Kleinunternehmer §19). Sonst würde Brutto−Netto fälschlich als Vorsteuer/USt gezählt.
+  if(rt!=null){
+    if(rt===0) return 0;
+    if(n!=null) return Math.round(n*rt/100*100)/100;
+    if(b!=null) return Math.round((b-b/(1+rt/100))*100)/100;
+  }
+  // Kein USt-Satz hinterlegt: aus Brutto−Netto-Differenz ableiten.
   if(n!=null && b!=null) return Math.max(0, Math.round((b-n)*100)/100);
-  if(n!=null && rt) return Math.round(n*rt/100*100)/100;
-  if(b!=null && rt) return Math.round((b-b/(1+rt/100))*100)/100;
   return 0;
 }
 function renderUst(){
@@ -1170,10 +1176,11 @@ function renderUst(){
   const rows=[19,7].map(rt=>`<tr><td>${rt}%</td><td class="num">${fmt(byRate(verb,rt))}</td><td class="num">${fmt(byRate(ford,rt))}</td></tr>`).join('');
   document.getElementById('ustOverview').innerHTML=`
     <div class="statrow">
-      <div class="stat" style="cursor:default"><div class="l">Vorsteuer gezahlt (Eingang)</div><div class="v" style="color:var(--green)">${fmt(vorsteuer)}</div></div>
-      <div class="stat" style="cursor:default"><div class="l">Vereinnahmte USt (Ausgang)</div><div class="v">${fmt(vereinnahmt)}</div></div>
-      <div class="stat" style="cursor:default"><div class="l">${saldo>=0?'Voraussichtl. Erstattung':'Voraussichtl. Zahllast'}</div><div class="v" style="color:${saldo>=0?'var(--green)':'var(--red)'}">${fmt(Math.abs(saldo))}</div></div>
+      <div class="stat" data-konto="ust_vor" style="cursor:pointer"><div class="l">Vorsteuer gezahlt (Eingang) <i class="ti ti-chevron-right" style="font-size:12px;vertical-align:-1px"></i></div><div class="v" style="color:var(--green)">${fmt(vorsteuer)}</div></div>
+      <div class="stat" data-konto="ust_ein" style="cursor:pointer"><div class="l">Vereinnahmte USt (Ausgang) <i class="ti ti-chevron-right" style="font-size:12px;vertical-align:-1px"></i></div><div class="v">${fmt(vereinnahmt)}</div></div>
+      <div class="stat" data-konto="ust" style="cursor:pointer"><div class="l">${saldo>=0?'Voraussichtl. Erstattung':'Voraussichtl. Zahllast'} <i class="ti ti-chevron-right" style="font-size:12px;vertical-align:-1px"></i></div><div class="v" style="color:${saldo>=0?'var(--green)':'var(--red)'}">${fmt(Math.abs(saldo))}</div></div>
     </div>
+    <p class="hint" style="margin:2px 0 8px"><i class="ti ti-hand-finger" style="vertical-align:-2px"></i> Tippe auf einen Betrag, um die einzelnen Rechnungen zu sehen oder eine hinzuzufügen.</p>
     <table style="margin-top:6px"><thead><tr><th>USt-Satz</th><th class="num">Vorsteuer (Eingang)</th><th class="num">Vereinnahmt (Ausgang)</th></tr></thead><tbody>${rows}</tbody></table>
     <h3 style="font-size:14px;margin:20px 0 8px">Belege für die Steuererklärung (Vorsteuer)</h3>
     ${vorsteuerBelegList(verb)}
@@ -1252,6 +1259,8 @@ function kontoDetail(key){
     case 'prognoseMit': return {title:'Voraussichtlicher Kontostand', hint:'Ist-Stand plus offene Forderungen, minus offene Verbindlichkeiten.', sections:[secEin, secAus, secOffF, secOffV]};
     case 'verdient': return {title:'Verdient (netto, ohne USt)', hint:'Euer Umsatz ohne Umsatzsteuer aus bezahlten Forderungen.', sections:[{label:'Bezahlte Forderungen (netto)', sign:1, items:items(paidF,N)}]};
     case 'ust': return {title:'Umsatzsteuer & Finanzamt', hint:'Die USt, die ihr euren Kunden berechnet habt, leitet ihr ans Finanzamt weiter. Davon zieht ihr die Vorsteuer (USt aus euren Eingangsrechnungen) ab. Die Differenz ist eure Zahllast (positiv = ihr zahlt) bzw. Erstattung.', sections:[{label:'Vereinnahmte USt (aus euren Rechnungen → ans Finanzamt)', sign:1, items:items(ford,U)},{label:'Vorsteuer (aus Eingangsrechnungen → zieht ihr ab)', sign:-1, items:items(verb,U)}]};
+    case 'ust_ein': return {title:'Vereinnahmte USt (Ausgang)', hint:'Die Umsatzsteuer aus euren gestellten Rechnungen – diese leitet ihr ans Finanzamt weiter.', sections:[{label:'USt je Ausgangsrechnung', sign:1, items:items(ford,U)}]};
+    case 'ust_vor': return {title:'Vorsteuer (Eingang)', hint:'Die Umsatzsteuer aus euren Eingangsrechnungen, die ihr von der Zahllast abziehen dürft. 0 % bedeutet keine Vorsteuer (z. B. Versicherungen).', sections:[{label:'Vorsteuer je Eingangsrechnung', sign:1, items:items(verb,U)}]};
   }
   return null;
 }
@@ -1266,7 +1275,8 @@ function showKontoDetail(key){
     html+='</div>';
   });
   document.getElementById('kontoDetailTitle').textContent=d.title;
-  document.getElementById('kontoDetailBody').innerHTML=`<p class="hint" style="margin:0 0 4px">${d.hint}</p>${html}<div style="display:flex;justify-content:space-between;font-weight:700;font-size:16px;border-top:2px solid var(--border);margin-top:14px;padding-top:10px"><span>Ergebnis</span><span>${fmt(total)}</span></div>`;
+  const addBtns = /^ust/.test(key) ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;border-top:1px solid var(--border);padding-top:14px"><button class="btn" data-addinv="ein"><i class="ti ti-plus"></i> Eingangsrechnung hinzufügen</button><button class="btn ghost" style="color:var(--text)" data-addinv="aus"><i class="ti ti-plus"></i> Ausgangsrechnung hinzufügen</button></div>` : '';
+  document.getElementById('kontoDetailBody').innerHTML=`<p class="hint" style="margin:0 0 4px">${d.hint}</p>${html}<div style="display:flex;justify-content:space-between;font-weight:700;font-size:16px;border-top:2px solid var(--border);margin-top:14px;padding-top:10px"><span>Ergebnis</span><span>${fmt(total)}</span></div>${addBtns}`;
   document.getElementById('kontoDetailModal').classList.add('open');
 }
 const dashFilter={Forderung:'offen', Verbindlichkeit:'offen'};
@@ -2855,10 +2865,14 @@ document.getElementById('umsatzChart').addEventListener('click',e=>{
 });
 document.getElementById('umsatzChart').addEventListener('change',e=>{ if(e.target.id==='chartPaid'){ dashChart.paidOnly=e.target.checked; renderUmsatzChart(); } });
 document.getElementById('kontoDetailClose').onclick=()=>document.getElementById('kontoDetailModal').classList.remove('open');
-document.getElementById('kontoDetailModal').addEventListener('click',e=>{ if(e.target.id==='kontoDetailModal') e.currentTarget.classList.remove('open'); });
+document.getElementById('kontoDetailModal').addEventListener('click',e=>{
+  const add=e.target.closest('[data-addinv]'); if(add){ document.getElementById('kontoDetailModal').classList.remove('open'); if(add.dataset.addinv==='ein') openForm('verbindlichkeiten'); else openGen(); return; }
+  if(e.target.id==='kontoDetailModal') e.currentTarget.classList.remove('open');
+});
 document.getElementById('dashForderungen').addEventListener('click',e=>{ const c=e.target.closest('[data-cust]'); if(c) openCustomer(c.dataset.cust); });
 document.getElementById('dashVerbindlichkeiten').addEventListener('click',e=>{ const v=e.target.closest('[data-vb]'); if(v) openForm('verbindlichkeiten', v.dataset.vb); });
 document.getElementById('ustOverview').addEventListener('click',e=>{
+  const kt=e.target.closest('[data-konto]'); if(kt){ showKontoDetail(kt.dataset.konto); return; }
   const ae=e.target.closest('[data-assignedit]'); if(ae){ assignEditing.add(ae.dataset.assignedit); renderUst(); return; }
   const l=e.target.closest('[data-libdl]'); if(l){ downloadLibBeleg(l.dataset.libdl); return; }
   const i=e.target.closest('[data-inlinedl]'); if(i){ downloadInlineBeleg(i.dataset.inlinedl); }
