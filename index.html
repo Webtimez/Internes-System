@@ -467,6 +467,11 @@
         </div>
         <div id="mailAutoView" style="display:none">
         <div class="card">
+          <div class="head" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0"><i class="ti ti-file-invoice" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>Automatische Rechnungen</h3><button class="btn" id="autoInvNew"><i class="ti ti-plus"></i> Neue automatische Rechnung</button></div>
+          <p class="hint" style="margin:6px 0 12px">Lege fest, welcher Kunde regelmäßig (z. B. monatlich) automatisch eine Rechnung per E-Mail bekommt. Datum und fortlaufende Rechnungsnummer werden bei jedem Lauf automatisch gesetzt. Einmal einstellen – danach läuft der Versand von selbst.</p>
+          <div id="autoInvList"></div>
+        </div>
+        <div class="card">
           <div class="head"><h3><i class="ti ti-robot" style="color:var(--pink);vertical-align:-2px;margin-right:6px"></i>Automatische Zahlungserinnerungen</h3></div>
           <label style="display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer;margin-bottom:12px"><input type="checkbox" id="m-auto" style="width:18px;height:18px"> Automatische Erinnerungen aktivieren</label>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -1900,7 +1905,7 @@ function renderMailFolder(){
   const auto=mailFolder==='auto';
   document.getElementById('mailAutoView').style.display=auto?'block':'none';
   document.getElementById('mailFolderView').style.display=auto?'none':'block';
-  if(auto) return;
+  if(auto){ renderAutoInvoices(); return; }
   const el=document.getElementById('mailList');
   let list, empty;
   if(mailFolder==='geplant'){ list=store.emails.filter(e=>e.status==='geplant'); empty='Keine geplanten E-Mails.'; }
@@ -1917,6 +1922,17 @@ function renderMailFolder(){
   }).join('')+'</div>';
 }
 document.getElementById('mailTabs').addEventListener('click',e=>{ const b=e.target.closest('[data-mfolder]'); if(b){ mailFolder=b.dataset.mfolder; renderMailFolder(); } });
+function renderAutoInvoices(){
+  const el=document.getElementById('autoInvList'); if(!el) return;
+  const list=(store.abos||[]).filter(a=>a.auto_email);
+  if(!list.length){ el.innerHTML='<div class="hint" style="padding:4px 0">Noch keine automatischen Rechnungen. Klicke oben auf „Neue automatische Rechnung".</div>'; return; }
+  el.innerHTML='<div class="doclist">'+list.map(a=>{
+    const brutto=(Number(a.netto)||0)*(1+(Number(a.ust_satz)||0)/100);
+    return `<div class="row" style="align-items:flex-start"><div class="grow" style="white-space:normal"><div style="font-weight:500">${esc(a.partner||'')} · ${fmt(brutto)}</div><div style="font-size:12px;color:var(--muted)">${esc(a.leistung||'')}</div><div style="font-size:11px;color:var(--hint)">${esc(a.intervall||'Monatlich')} · nächste Rechnung ${fmtD(a.naechster_lauf)}</div></div>${a.aktiv?'<span class="pill green" style="font-size:11px">aktiv</span>':'<span class="pill gray" style="font-size:11px">pausiert</span>'}<i class="ti ti-edit iconbtn" data-aboedit="${a.id}" title="Bearbeiten"></i></div>`;
+  }).join('')+'</div>';
+}
+document.getElementById('autoInvNew').onclick=()=>{ openAbo(null); const ck=document.getElementById('ab-automail'); if(ck){ ck.checked=true; const b=document.getElementById('ab-mailbox'); if(b) b.style.display='block'; } };
+document.getElementById('autoInvList').addEventListener('click',e=>{ const ae=e.target.closest('[data-aboedit]'); if(ae) openAbo(ae.dataset.aboedit); });
 document.getElementById('mailList').addEventListener('click',async e=>{
   const d=e.target.closest('[data-emaildel]'); if(!d) return;
   if(!confirm('Eintrag löschen?')) return;
@@ -2223,7 +2239,7 @@ function renderAbos(){
   if(!list.length){ el.innerHTML=head+emptyState('Noch keine Abos. Lege z. B. eine monatliche Wartung an.','ti-repeat'); return; }
   let h=head+'<table><thead><tr><th>Kunde</th><th>Leistung</th><th class="num">Betrag</th><th>Intervall</th><th>Nächste Rechnung</th><th>Status</th><th class="act"></th></tr></thead><tbody>';
   list.forEach(a=>{ const brutto=(Number(a.netto)||0)*(1+(Number(a.ust_satz)||0)/100);
-    h+=`<tr><td>${esc(a.partner||'')}</td><td>${esc(a.leistung||'')}</td><td class="num">${fmt(brutto)}</td><td>${esc(a.intervall||'')}</td><td>${fmtD(a.naechster_lauf)}</td><td>${a.aktiv?'<span class="pill green">aktiv</span>':'<span class="pill gray">pausiert</span>'}</td><td class="act"><i class="ti ti-receipt iconbtn" data-abogen="${a.id}" title="Jetzt Rechnung erzeugen"></i><i class="ti ${a.aktiv?'ti-player-pause':'ti-player-play'} iconbtn" data-aboaktiv="${a.id}" title="${a.aktiv?'Pausieren':'Aktivieren'}"></i><i class="ti ti-edit iconbtn" data-aboedit="${a.id}"></i><i class="ti ti-trash iconbtn" data-abodel="${a.id}"></i></td></tr>`; });
+    h+=`<tr><td>${esc(a.partner||'')}</td><td>${esc(a.leistung||'')}</td><td class="num">${fmt(brutto)}</td><td>${esc(a.intervall||'')}</td><td>${fmtD(a.naechster_lauf)}</td><td>${a.aktiv?'<span class="pill green">aktiv</span>':'<span class="pill gray">pausiert</span>'}${a.auto_email?' <i class="ti ti-mail" title="Wird automatisch per E-Mail versendet" style="color:var(--pink);vertical-align:-2px"></i>':''}</td><td class="act"><i class="ti ti-receipt iconbtn" data-abogen="${a.id}" title="Jetzt Rechnung erzeugen"></i><i class="ti ${a.aktiv?'ti-player-pause':'ti-player-play'} iconbtn" data-aboaktiv="${a.id}" title="${a.aktiv?'Pausieren':'Aktivieren'}"></i><i class="ti ti-edit iconbtn" data-aboedit="${a.id}"></i><i class="ti ti-trash iconbtn" data-abodel="${a.id}"></i></td></tr>`; });
   el.innerHTML=h+'</tbody></table>';
 }
 let aboEditId=null;
@@ -2232,6 +2248,7 @@ function openAbo(id){
   const a=id?store.abos.find(x=>x.id===id):{}; aboEditId=id||null;
   const opts=store.kunden.map(k=>`<option value="${k.id}" ${a.kunde_id===k.id?'selected':''}>${esc(k.name||'')}</option>`).join('');
   const defUst=store.settings.kleinunternehmer?'0':(store.settings.ust||'19');
+  const c=mailCfg();
   document.getElementById('aboTitle').textContent=id?'Abo bearbeiten':'Neues Abo';
   document.getElementById('aboBody').innerHTML=`
     <div class="field"><label>Kunde</label><select id="ab-kunde">${opts}</select></div>
@@ -2240,17 +2257,27 @@ function openAbo(id){
     <div class="field half"><label>USt-Satz (%)</label><select id="ab-ust">${['19','7','0'].map(o=>`<option ${String(a.ust_satz!=null?a.ust_satz:defUst)===o?'selected':''}>${o}</option>`).join('')}</select></div>
     <div class="field half"><label>Intervall</label><select id="ab-int">${ABO_INT.map(o=>`<option ${(a.intervall||'Monatlich')===o?'selected':''}>${o}</option>`).join('')}</select></div>
     <div class="field half"><label>Zahlungsziel (Tage)</label><input id="ab-ziel" type="number" value="${a.zahlungsziel!=null?a.zahlungsziel:14}"></div>
-    <div class="field"><label>Nächste Rechnung am</label><input id="ab-next" type="date" value="${a.naechster_lauf||todayStr}"></div>`;
+    <div class="field"><label>Nächste Rechnung am</label><input id="ab-next" type="date" value="${a.naechster_lauf||todayStr}"></div>
+    <div class="field" style="border-top:1px solid var(--border);margin-top:8px;padding-top:14px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;margin:0"><input type="checkbox" id="ab-automail" style="width:18px;height:18px" ${a.auto_email?'checked':''}> Rechnung automatisch per E-Mail an den Kunden senden</label>
+    </div>
+    <div id="ab-mailbox" style="display:${a.auto_email?'block':'none'}">
+      <p class="hint" style="margin:4px 0 10px">Bei jedem Lauf wird die Rechnung als PDF erzeugt und automatisch an die Kunden-E-Mail aus dem CRM gesendet. Platzhalter: <code>{nr}</code>, <code>{betrag}</code>, <code>{faellig}</code>, <code>{kunde}</code>, <code>{firma}</code>.</p>
+      <div class="field"><label>Betreff</label><input id="ab-mbetreff" value="${esc(a.email_betreff||c.rBetreff)}"></div>
+      <div class="field"><label>Text</label><textarea id="ab-mtext" rows="6" style="font-family:inherit">${esc(a.email_text||c.rText)}</textarea></div>
+      <div class="field"><label>Kopie an (CC, optional)</label><input id="ab-mcc" value="${esc(a.email_cc||'')}" placeholder="z. B. team@webtimez.com"></div>
+    </div>`;
+  const amTgl=document.getElementById('ab-automail'); if(amTgl){ amTgl.onchange=()=>{ document.getElementById('ab-mailbox').style.display=amTgl.checked?'block':'none'; }; }
   document.getElementById('aboModal').classList.add('open');
 }
 document.getElementById('aboCancel').onclick=()=>document.getElementById('aboModal').classList.remove('open');
 document.getElementById('aboSave').onclick=async ()=>{
   const kid=document.getElementById('ab-kunde').value; const k=store.kunden.find(x=>x.id===kid); if(!k){ alert('Bitte Kunde wählen.'); return; }
-  const obj={ kunde_id:kid, partner:k.name, leistung:document.getElementById('ab-leistung').value.trim(), netto:parseFloat(document.getElementById('ab-netto').value)||0, ust_satz:parseFloat(document.getElementById('ab-ust').value)||0, intervall:document.getElementById('ab-int').value, zahlungsziel:parseInt(document.getElementById('ab-ziel').value)||14, naechster_lauf:document.getElementById('ab-next').value||todayStr };
+  const obj={ kunde_id:kid, partner:k.name, leistung:document.getElementById('ab-leistung').value.trim(), netto:parseFloat(document.getElementById('ab-netto').value)||0, ust_satz:parseFloat(document.getElementById('ab-ust').value)||0, intervall:document.getElementById('ab-int').value, zahlungsziel:parseInt(document.getElementById('ab-ziel').value)||14, naechster_lauf:document.getElementById('ab-next').value||todayStr, auto_email:document.getElementById('ab-automail').checked, email_betreff:document.getElementById('ab-mbetreff').value.trim()||null, email_text:document.getElementById('ab-mtext').value||null, email_cc:document.getElementById('ab-mcc').value.trim()||null };
   try{
     if(aboEditId){ const {data,error}=await sb.from('abos').update(obj).eq('id',aboEditId).select().single(); if(error)throw error; const i=store.abos.findIndex(x=>x.id===aboEditId); store.abos[i]=data; }
     else { obj.aktiv=true; obj.erstellt_von=MY_ID; const {data,error}=await sb.from('abos').insert(obj).select().single(); if(error)throw error; store.abos.push(data); }
-    document.getElementById('aboModal').classList.remove('open'); renderFin('Abos');
+    document.getElementById('aboModal').classList.remove('open'); renderFin('Abos'); try{renderAutoInvoices();}catch(_){}
   }catch(e){ alert('Speichern fehlgeschlagen: '+(e.message||e)); }
 };
 async function aboToggle(id){ const a=store.abos.find(x=>x.id===id); if(!a) return; try{ const {data,error}=await sb.from('abos').update({aktiv:!a.aktiv}).eq('id',id).select().single(); if(error)throw error; const i=store.abos.findIndex(x=>x.id===id); store.abos[i]=data; renderFin('Abos'); }catch(e){ alert('Fehler: '+(e.message||e)); } }
@@ -2793,7 +2820,7 @@ async function renderNachrichten(){
   document.getElementById('myName').textContent=myName();
   const others=store.profiles.filter(p=>p.id!==MY_ID);
   const unread={};
-  try{ const {data}=await sb.from('nachrichten').select('von').eq('an',MY_ID).eq('gelesen',false); (data||[]).forEach(m=>{ unread[m.von]=(unread[m.von]||0)+1; }); }catch(e){}
+  try{ const {data}=await sb.from('nachrichten').select('von').eq('an',MY_ID).eq('gelesen',false).neq('von',MY_ID); (data||[]).forEach(m=>{ unread[m.von]=(unread[m.von]||0)+1; }); }catch(e){}
   const groups=myGroups();
   let gUnread={};
   if(groups.length){ try{ const {data:gm}=await sb.from('nachrichten').select('gruppe_id,von,created_at').not('gruppe_id','is',null); (gm||[]).forEach(m=>{ if(m.von!==MY_ID && m.created_at>groupLastRead(m.gruppe_id)) gUnread[m.gruppe_id]=(gUnread[m.gruppe_id]||0)+1; }); }catch(e){} }
@@ -2862,6 +2889,7 @@ async function openConversation(peerId){
   if(error){ th.innerHTML='<div class="hint">Nachrichten konnten nicht geladen werden.</div>'; return; }
   currentThread=(data||[]).filter(m=>!m.gruppe_id); renderThread();
   try{ await sb.from('nachrichten').update({gelesen:true}).eq('an',MY_ID).eq('von',peerId).eq('gelesen',false); }catch(e){}
+  try{ const pill=document.querySelector(`#msgPeople .msgp[data-peer="${peerId}"] .unread`); if(pill) pill.remove(); }catch(e){}
   updateUnreadBadge();
 }
 function setMsgAttach(file){
@@ -2986,7 +3014,7 @@ setInterval(()=>{ if(currentView==='nachrichten' && MSG_PEER) openConversation(M
 
 async function updateUnreadBadge(){
   if(!sb||!MY_ID) return;
-  const {count}=await sb.from('nachrichten').select('id',{count:'exact',head:true}).eq('an',MY_ID).eq('gelesen',false);
+  const {count}=await sb.from('nachrichten').select('id',{count:'exact',head:true}).eq('an',MY_ID).eq('gelesen',false).neq('von',MY_ID);
   let total=count||0;
   try{ const groups=myGroups(); if(groups.length){ const {data:gm}=await sb.from('nachrichten').select('gruppe_id,von,created_at').not('gruppe_id','is',null); (gm||[]).forEach(m=>{ if(m.von!==MY_ID && m.created_at>groupLastRead(m.gruppe_id)) total++; }); } }catch(e){}
   const b=document.getElementById('navUnread'); if(b){ if(total){ b.textContent=total; b.style.display=''; } else b.style.display='none'; }
@@ -3033,7 +3061,7 @@ async function dailyReminder(){
   const dueInv=store.rechnungen.filter(r=>r.faellig && !['Bezahlt','Storniert'].includes(r.status) && daysTo(r.faellig)<=0);
   if(!myTasks.length && !dueInv.length){ try{localStorage.setItem(flag,'1');}catch(e){} return; }
   const text='Tagesüberblick '+fmtD(today)+': '+myTasks.length+' Aufgabe(n) fällig/überfällig'+(dueInv.length?(', '+dueInv.length+' Rechnung(en) fällig/überfällig'):'')+'.';
-  try{ await sb.from('nachrichten').insert({von:MY_ID,an:MY_ID,text}); localStorage.setItem(flag,'1'); updateUnreadBadge(); }catch(e){}
+  try{ await sb.from('nachrichten').insert({von:MY_ID,an:MY_ID,text,gelesen:true}); localStorage.setItem(flag,'1'); updateUnreadBadge(); }catch(e){}
 }
 let rtSet=false;
 function setupRealtime(){
