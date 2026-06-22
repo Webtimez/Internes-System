@@ -1182,16 +1182,18 @@ function renderUst(){
     </div>
     <p class="hint" style="margin:2px 0 8px"><i class="ti ti-hand-finger" style="vertical-align:-2px"></i> Tippe auf einen Betrag, um die einzelnen Rechnungen zu sehen oder eine hinzuzufügen.</p>
     <table style="margin-top:6px"><thead><tr><th>USt-Satz</th><th class="num">Vorsteuer (Eingang)</th><th class="num">Vereinnahmt (Ausgang)</th></tr></thead><tbody>${rows}</tbody></table>
-    <h3 style="font-size:14px;margin:20px 0 8px">Belege für die Steuererklärung (Vorsteuer)</h3>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:20px 0 8px"><h3 style="font-size:14px;margin:0">Belege für die Steuererklärung (Eingangsrechnungen)</h3><button class="btn ghost" id="ustAddVerb" style="color:var(--text);padding:6px 11px;font-size:13px"><i class="ti ti-plus"></i> Eingangsrechnung hinzufügen</button></div>
     ${vorsteuerBelegList(verb)}
-    <p class="hint" style="margin-top:10px">Vorsteuer = USt aus euren Eingangsrechnungen (bekommt ihr verrechnet/zurück). Diese Rechnungen lädst du fürs Finanzamt hoch – PDF hier herunterladen. Orientierungswerte, keine Steuerberatung.</p>`;
+    <p class="hint" style="margin-top:10px">Hier stehen <b>alle</b> Eingangsrechnungen – auch Versicherungen oder andere Belege ohne Vorsteuer (0 %). Die enthaltene Vorsteuer wird je Rechnung angezeigt; den passenden Beleg (PDF) ordnest du aus der Ablage zu oder lädst ihn herunter. Orientierungswerte, keine Steuerberatung.</p>`;
 }
 const assignEditing=new Set();
 function vorsteuerBelegList(verb){
-  const list=verb.filter(r=>ustOf(r)>0).sort((a,b)=>(parseD(a.datum)||0)-(parseD(b.datum)||0));
-  if(!list.length) return '<div class="hint">Noch keine Vorsteuer-Rechnungen erfasst.</div>';
+  const list=verb.slice().sort((a,b)=>(parseD(a.datum)||0)-(parseD(b.datum)||0));
+  if(!list.length) return '<div class="hint">Noch keine Eingangsrechnungen erfasst. Lege über „Eingangsrechnung hinzufügen" eine an.</div>';
   const opts=sel=>'<option value="">— Beleg aus Ablage wählen —</option>'+store.belege.map(b=>`<option value="${b.id}" ${sel===b.id?'selected':''}>${esc(b.name||'')}</option>`).join('');
   return list.map(r=>{
+    const u=ustOf(r);
+    const ustLabel = u>0 ? `USt ${fmt(u)}` : `<span style="color:var(--muted)">ohne Vorsteuer</span>`;
     const dl = r.beleg_id ? `<span class="link" data-libdl="${r.beleg_id}" style="white-space:nowrap"><i class="ti ti-download"></i> PDF</span>`
             : (r.beleg_name ? `<span class="link" data-inlinedl="${r.id}" style="white-space:nowrap"><i class="ti ti-download"></i> PDF</span>` : '');
     let belegCtrl;
@@ -1201,7 +1203,7 @@ function vorsteuerBelegList(verb){
     } else {
       belegCtrl=`<select data-assign="${r.id}" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;max-width:180px">${opts(r.beleg_id)}</select>`;
     }
-    return `<div class="row" style="flex-wrap:wrap;gap:8px"><span class="grow">${esc(r.nr||'–')} · ${esc(r.partner||'')} · ${fmtD(r.datum)}</span><span style="white-space:nowrap">USt ${fmt(ustOf(r))}</span>${belegCtrl}${dl}</div>`;
+    return `<div class="row" style="flex-wrap:wrap;gap:8px"><span class="grow">${esc(r.nr||'–')} · ${esc(r.partner||'')} · ${fmtD(r.datum)}</span><span style="white-space:nowrap">${ustLabel}</span>${belegCtrl}${dl}</div>`;
   }).join('');
 }
 function renderKonto(){
@@ -2900,6 +2902,7 @@ document.getElementById('kontoDetailModal').addEventListener('click',e=>{
 document.getElementById('dashForderungen').addEventListener('click',e=>{ const c=e.target.closest('[data-cust]'); if(c) openCustomer(c.dataset.cust); });
 document.getElementById('dashVerbindlichkeiten').addEventListener('click',e=>{ const v=e.target.closest('[data-vb]'); if(v) openForm('verbindlichkeiten', v.dataset.vb); });
 document.getElementById('ustOverview').addEventListener('click',e=>{
+  if(e.target.closest('#ustAddVerb')){ openForm('verbindlichkeiten'); return; }
   const kt=e.target.closest('[data-konto]'); if(kt){ showKontoDetail(kt.dataset.konto); return; }
   const ae=e.target.closest('[data-assignedit]'); if(ae){ assignEditing.add(ae.dataset.assignedit); renderUst(); return; }
   const l=e.target.closest('[data-libdl]'); if(l){ downloadLibBeleg(l.dataset.libdl); return; }
